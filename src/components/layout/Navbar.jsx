@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ArrowRight, User, LogOut, LayoutGrid, Gift, Sparkles } from 'lucide-react';
@@ -8,18 +8,33 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const {
     user,
     signOut
   } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = window.scrollY;
+      setIsScrolled(scrollTop > 50);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
   };
   return <>
       <header className="fixed top-4 left-0 right-0 z-50 px-4">
-        <nav className="max-w-7xl mx-auto bg-brand-purple-dark/80 backdrop-blur-sm text-white border-2 border-black flex justify-between items-center h-[4.5rem] px-4">
+        <nav className={`max-w-7xl mx-auto text-white border-2 border-black flex justify-between items-center h-[4.5rem] px-4 transition-all duration-300 ${
+          isScrolled 
+            ? 'bg-brand-purple-dark/80 backdrop-blur-sm' 
+            : 'bg-brand-purple-dark/95'
+        }`}>
           <Link to="/" className="flex items-center space-x-2 group">
             <Gift className="w-8 h-8 text-brand-green" />
             <span className="text-2xl font-bold">HeySpender.</span>
@@ -33,10 +48,8 @@ const Navbar = () => {
             {user ? <div className="flex items-center space-x-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-10 w-10 p-0">
-                       <div className="w-10 h-10 flex items-center justify-center border-2 border-black bg-brand-green">
-                          <User className="w-6 h-6 text-black" strokeWidth={2.5} />
-                       </div>
+                    <Button variant="custom" className="relative h-10 w-10 p-0 bg-brand-green">
+                       <User className="w-6 h-6 text-black" strokeWidth={2.5} />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -91,7 +104,11 @@ const Navbar = () => {
       }} exit={{
         opacity: 0,
         y: -20
-      }} className="fixed top-24 left-4 right-4 z-40 md:hidden bg-brand-purple-dark/80 backdrop-blur-sm text-white border-2 border-black p-4">
+      }} className={`fixed top-24 left-4 right-4 z-40 md:hidden text-white border-2 border-black p-4 transition-all duration-300 ${
+        isScrolled 
+          ? 'bg-brand-purple-dark/80 backdrop-blur-sm' 
+          : 'bg-brand-purple-dark/95'
+      }`}>
              <div className="flex flex-col space-y-2 mb-4">
                 <Button onClick={() => { navigate('/wishlists'); setMobileMenuOpen(false); }} variant="custom" className="bg-[#E94B29] text-white w-full justify-start">
                     <Sparkles className="w-4 h-4 mr-2" />

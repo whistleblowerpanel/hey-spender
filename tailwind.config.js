@@ -15,6 +15,14 @@ module.exports = {
 				'2xl': '1400px',
 			},
 		},
+		screens: {
+			'xs': '475px',
+			'sm': '640px',
+			'md': '768px',
+			'lg': '1024px',
+			'xl': '1280px',
+			'2xl': '1536px',
+		},
 		extend: {
       fontFamily: {
         sans: ['Brockmann', 'Poppins', 'sans-serif'],
@@ -27,6 +35,7 @@ module.exports = {
         'brand-salmon': '#EEA67F',
         'brand-accent-red': '#E94B29',
         'brand-pink-light': '#FFDDFF',
+        'brand-cream': '#FDF4E8',
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Gift, Clock, Loader2, Image as ImageIcon, Copy, QrCode as QrCodeIcon, Share2, Info, Mail, Phone, Eye, EyeOff, CheckCircle, X, ExternalLink, DollarSign } from 'lucide-react';
+import { Gift, Clock, Loader2, Image as ImageIcon, Copy, QrCode as QrCodeIcon, Share2, Info, Mail, Phone, Eye, EyeOff, CheckCircle, X, ExternalLink, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -18,6 +18,21 @@ import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { z } from 'zod';
 import Confetti from '@/components/Confetti';
+
+// Helper function to get progress bar color based on percentage
+const getProgressColor = (percentage) => {
+  if (percentage >= 100) return 'bg-brand-green'; // Complete - Green
+  if (percentage >= 75) return 'bg-brand-orange'; // Almost complete - Orange  
+  if (percentage >= 50) return 'bg-brand-salmon'; // Halfway - Salmon
+  if (percentage >= 25) return 'bg-brand-accent-red'; // Started - Accent Red
+  return 'bg-brand-purple-dark'; // Just started - Purple Dark
+};
+
+// Helper function to calculate progress percentage
+const calculateProgress = (raised, target) => {
+  if (!target || target === 0) return 0;
+  return Math.min(Math.round((raised / target) * 100), 100);
+};
 
 const claimSchema = z.object({
   email: z.string().email("Please enter a valid email address."),
@@ -48,7 +63,7 @@ const Countdown = ({ date }) => {
     }, [date]);
 
     return (
-        <div className="flex items-center space-x-2 text-white">
+        <div className="flex items-center justify-center space-x-2 text-white">
             <Clock className="w-5 h-5" />
             <span className="font-semibold">{timeLeft}</span>
         </div>
@@ -57,15 +72,15 @@ const Countdown = ({ date }) => {
 
 const LoggedInClaimDialog = ({ open, onOpenChange, onConfirm, loading, item }) => (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-brand-purple-dark border-2 border-black">
             <AlertDialogHeader>
-                <AlertDialogTitle>Confirm Your Claim</AlertDialogTitle>
-                <AlertDialogDescription>You are about to claim "{item.name}". This will reserve the item for you. Are you sure?</AlertDialogDescription>
+                <AlertDialogTitle className="text-brand-beige text-xl font-bold">Add to My Spender List</AlertDialogTitle>
+                <AlertDialogDescription className="text-white">You are about to add "{item.name}" to your spender list. This will help you track items you want to buy for this person. Continue?</AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={onConfirm} disabled={loading}>
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Yes, Claim It!'}
+            <AlertDialogFooter className="flex justify-between space-x-2">
+                <AlertDialogCancel className="bg-brand-beige text-brand-purple-dark hover:bg-brand-beige/90 font-semibold border-2 border-black shadow-[-4px_4px_0px_#000] hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onConfirm} disabled={loading} className="bg-brand-green text-black hover:bg-brand-green/90 font-semibold border-2 border-black shadow-[-4px_4px_0px_#000] hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Yes, Add to List!'}
                 </AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
@@ -92,19 +107,44 @@ const ClaimItemModal = ({ item, onClaimed, trigger }) => {
 
     const handleLoggedInClaim = async () => {
         setLoading(true);
-        const { error } = await supabase.rpc('claim_item_for_existing_user', {
-            p_item_id: item.id,
-            p_user_id: user.id
-        });
+        console.log('Claiming item:', item.id, 'for user:', user.id);
+        
+        try {
+            // Simple approach: Create claim directly
+            const { data: claimData, error: claimError } = await supabase
+                .from('claims')
+                .insert({
+                    wishlist_item_id: item.id,
+                    supporter_user_id: user.id,
+                    supporter_contact: user.email,
+                    status: 'confirmed',
+                    expire_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                })
+                .select()
+                .single();
 
-        if (error) {
-            toast({ variant: 'destructive', title: 'Failed to claim item', description: error.message });
-        } else {
-            toast({ title: 'Item Claimed!', description: 'You can now see this item in your spender list.' });
-            onClaimed();
-            setOpen(false);
-            navigate('/dashboard', { state: { defaultTab: 'claims' } });
+            if (claimError) {
+                console.error('Claim error:', claimError);
+                toast({ variant: 'destructive', title: 'Failed to claim item', description: claimError.message });
+            } else {
+                console.log('Claim successful:', claimData);
+                
+                // Update item quantity
+                await supabase
+                    .from('wishlist_items')
+                    .update({ qty_claimed: (item.qty_claimed || 0) + 1 })
+                    .eq('id', item.id);
+
+                toast({ title: 'Added to Spender List!', description: 'This item has been added to your spender list.' });
+                onClaimed();
+                setOpen(false);
+                navigate('/dashboard', { state: { defaultTab: 'claims' } });
+            }
+        } catch (err) {
+            console.error('Unexpected error:', err);
+            toast({ variant: 'destructive', title: 'Failed to claim item', description: 'An unexpected error occurred.' });
         }
+        
         setLoading(false);
     };
 
@@ -287,6 +327,8 @@ const WishlistPage = () => {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const wishlistUrl = `${window.location.origin}/${username}/${slug}`;
   const [showConfetti, setShowConfetti] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
 
   const fetchWishlistData = useCallback(async () => {
     // No full page loader on re-fetch
@@ -306,10 +348,12 @@ const WishlistPage = () => {
     setWishlist(data);
     setGoals(data.goals || []);
 
+    // Add timestamp to force fresh data and avoid caching issues
     const { data: itemsData, error: itemsError } = await supabase
         .from('wishlist_items')
         .select('*')
-        .eq('wishlist_id', data.id);
+        .eq('wishlist_id', data.id)
+        .order('created_at', { ascending: false });
 
     if (itemsError) {
         toast({ variant: 'destructive', title: 'Error fetching items'});
@@ -326,6 +370,18 @@ const WishlistPage = () => {
     return allItemsClaimed || anyGoalReached;
   }, [items, goals]);
 
+  // Pagination logic
+  const totalPages = Math.ceil(items.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentItems = items.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    // Scroll to top of items section
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   useEffect(() => {
     if (celebrate) {
         setShowConfetti(true);
@@ -333,12 +389,67 @@ const WishlistPage = () => {
         return () => clearTimeout(timer);
     }
   }, [celebrate]);
+
+  // Reset to first page when items change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [items.length]);
   
 
   useEffect(() => {
     setLoading(true);
     fetchWishlistData();
   }, [fetchWishlistData]);
+
+  // Set up real-time subscription for wishlist items
+  useEffect(() => {
+    if (!wishlist?.id) return;
+
+    const subscription = supabase
+      .channel(`wishlist-${wishlist.id}-changes`)
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'wishlist_items',
+          filter: `wishlist_id=eq.${wishlist.id}`
+        }, 
+        (payload) => {
+          // Refresh the items data when changes occur
+          fetchWishlistData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [wishlist?.id, fetchWishlistData]);
+
+  // Set up real-time subscription for claims (when items are available)
+  useEffect(() => {
+    if (!wishlist?.id || items.length === 0) return;
+
+    const subscription = supabase
+      .channel(`claims-${wishlist.id}-changes`)
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'claims',
+          filter: `wishlist_item_id=in.(${items.map(item => item.id).join(',')})`
+        }, 
+        (payload) => {
+          // Refresh the items data when claims change
+          fetchWishlistData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [wishlist?.id, items, fetchWishlistData]);
 
   const generateQrCode = async () => {
     if (qrCodeUrl) return;
@@ -354,8 +465,38 @@ const WishlistPage = () => {
     navigator.clipboard.writeText(wishlistUrl);
     toast({ title: 'Link copied to clipboard!' });
   };
+
+  const refreshData = async () => {
+    // Force a complete refresh by clearing state first
+    setItems([]);
+    setWishlist(null);
+    await fetchWishlistData();
+  };
   
-  const notImplemented = () => toast({title: "🚧 This feature isn't implemented yet—but don't worry! You can request it in your next prompt! 🚀"});
+  const handleShare = async () => {
+    // Implement share functionality with refresh
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: wishlist.title,
+          text: `Check out ${wishlist.title} wishlist!`,
+          url: wishlistUrl,
+        });
+        // Refresh data after sharing to ensure it's up to date
+        await refreshData();
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          // Fallback to copy link if sharing fails
+          copyLink();
+          await refreshData();
+        }
+      }
+    } else {
+      // Fallback to copy link for browsers that don't support Web Share API
+      copyLink();
+      await refreshData();
+    }
+  };
 
   if (loading) {
     return <div className="flex justify-center items-center min-h-screen"><Loader2 className="h-16 w-16 animate-spin text-brand-purple-dark" /></div>;
@@ -398,11 +539,6 @@ const WishlistPage = () => {
           {wishlist.cover_image_url && (
             <img alt={wishlist.title} className="absolute top-0 left-0 w-full h-full object-cover opacity-20" src={wishlist.cover_image_url} />
           )}
-          {celebrate && (
-            <div className="absolute top-0 left-0 w-full bg-brand-green text-black font-bold py-2 text-center z-20">
-              🎉 GOAL REACHED! Thank you for your generosity! 🎉
-            </div>
-          )}
           <div className="relative z-10 space-y-4">
             <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg">{wishlist.title}</h1>
             <p className="text-lg text-white/90 drop-shadow-md">A wishlist by <Link to={`/${wishlist.user.username}`} className="font-bold hover:underline">{wishlist.user.full_name}</Link> for their {wishlist.occasion}</p>
@@ -410,15 +546,45 @@ const WishlistPage = () => {
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 py-8">
+        {celebrate && (
+          <div className="relative -mt-8 z-40 px-4">
+            <div className="flex justify-center">
+              <div className="bg-brand-green text-black font-bold py-3 px-4 md:px-8 rounded-lg shadow-lg border-2 border-black max-w-[calc(100vw-2rem)] text-center">
+                🎉 GOAL REACHED! Thank you for your generosity! 🎉
+              </div>
+            </div>
+          </div>
+        )}
+
+        <main className="max-w-7xl mx-auto py-8">
+            {/* Share buttons - on top of description */}
+            <div className="flex justify-center mb-8">
+              <div className="flex items-center gap-2">
+                <Button variant="custom" className="bg-white text-black h-10 px-3" onClick={copyLink}><Copy className="w-4 h-4 mr-2"/>Copy Link</Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="custom" className="bg-white text-black h-10 w-10 p-0" onClick={generateQrCode}>
+                      <QrCodeIcon className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-4">
+                    {qrCodeUrl ? <img alt="QR Code" src={qrCodeUrl} /> : <Loader2 className="w-10 h-10 animate-spin"/>}
+                  </PopoverContent>
+                </Popover>
+                <Button variant="custom" className="bg-white text-black h-10 w-10 p-0" onClick={handleShare} title="Share wishlist">
+                  <Share2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
             {wishlist.story && (
-                 <section className="mb-12 text-center max-w-3xl mx-auto">
+                 <section className="mb-16 text-center max-w-3xl mx-auto">
                     <p className="text-lg text-gray-700">{wishlist.story}</p>
                 </section>
             )}
 
             {goals.length > 0 && (
-                <section className="mb-12">
+                <section className="mb-16">
                     <h2 className="text-3xl font-bold text-brand-purple-dark mb-6">Cash Goals</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {goals.map((goal, index) => <GoalCard key={goal.id} goal={goal} index={index} recipientEmail={wishlist.user.email} onContributed={fetchWishlistData} />)}
@@ -429,26 +595,62 @@ const WishlistPage = () => {
             <section className="mb-12">
                  <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                     <h2 className="text-3xl font-bold text-brand-purple-dark">Wishlist Items</h2>
-                    <div className="flex items-center gap-2">
-                        <Button variant="custom" className="bg-white text-black" size="sm" onClick={copyLink}><Copy className="w-4 h-4 mr-2"/>Copy Link</Button>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="custom" className="bg-white text-black" size="icon" onClick={generateQrCode}>
-                                    <QrCodeIcon className="h-4 w-4" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-4">
-                                {qrCodeUrl ? <img alt="QR Code" src={qrCodeUrl} /> : <Loader2 className="w-10 h-10 animate-spin"/>}
-                            </PopoverContent>
-                        </Popover>
-                        <Button variant="custom" className="bg-white text-black" size="icon" onClick={notImplemented}><Share2 className="h-4 w-4" /></Button>
-                    </div>
                 </div>
                 
                 {items.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {items.map(item => <ItemCard key={item.id} item={item} onClaimed={fetchWishlistData} />)}
-                    </div>
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {currentItems.map(item => <ItemCard key={item.id} item={item} onClaimed={fetchWishlistData} />)}
+                        </div>
+                        
+                        {totalPages > 1 && (
+                            <div className="flex justify-center items-center mt-12 space-x-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handlePageChange(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className="flex items-center space-x-1"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                    <span>Previous</span>
+                                </Button>
+                                
+                                <div className="flex space-x-1">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                                        <Button
+                                            key={page}
+                                            variant={currentPage === page ? "custom" : "outline"}
+                                            size="sm"
+                                            onClick={() => handlePageChange(page)}
+                                            className={`w-10 h-10 ${
+                                                currentPage === page 
+                                                    ? "bg-brand-purple-dark text-white" 
+                                                    : "hover:bg-gray-100"
+                                            }`}
+                                        >
+                                            {page}
+                                        </Button>
+                                    ))}
+                                </div>
+                                
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handlePageChange(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className="flex items-center space-x-1"
+                                >
+                                    <span>Next</span>
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        )}
+                        
+                        <div className="text-center mt-6 text-sm text-gray-600">
+                            Showing {startIndex + 1} to {Math.min(endIndex, items.length)} of {items.length} items
+                        </div>
+                    </>
                 ) : (
                     <div className="text-center py-16 px-8 border-2 border-dashed border-gray-300">
                         <Info className="mx-auto h-12 w-12 text-gray-400" />
@@ -471,21 +673,42 @@ const ImagePreviewModal = ({ item, trigger }) => {
             <DialogContent className="max-w-4xl p-2 bg-transparent border-0" showCloseButton={false}>
                  <div className="relative">
                     <img alt={item.name} src={item.image_url} className="w-full h-auto object-contain max-h-[80vh]"/>
-                    <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-6 text-white">
-                        <h3 className="text-2xl font-bold">{item.name}</h3>
-                        <p className="mt-2 text-base">{item.description}</p>
-                        {item.product_url && (
-                            <a href={item.product_url} target="_blank" rel="noopener noreferrer">
-                                <Button variant="custom" className="mt-4 bg-white text-black">
-                                    <ExternalLink className="w-4 h-4 mr-2"/>View Product Link
-                                </Button>
-                            </a>
-                        )}
-                    </div>
                  </div>
-                 <DialogClose className="absolute -top-2 -right-2 rounded-full bg-white p-1 text-black">
-                    <X className="h-6 w-6" />
+                 <DialogClose className="absolute -top-2 -right-2 rounded-full bg-white p-1 text-brand-purple-dark">
+                    <X className="h-6 w-6 stroke-2" />
                  </DialogClose>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+const DescriptionModal = ({ item, trigger }) => {
+    const [open, setOpen] = useState(false);
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>{trigger}</DialogTrigger>
+            <DialogContent className="max-w-2xl bg-brand-purple-dark border-2 border-black">
+                <DialogHeader>
+                    <DialogTitle className="text-brand-beige text-xl font-bold">{item.name}</DialogTitle>
+                    <DialogDescription className="text-white/80">Full description</DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    <p className="text-white leading-relaxed text-base">{item.description}</p>
+                </div>
+                <DialogFooter className="flex justify-between space-x-2">
+                    {item.product_url && (
+                        <a href={item.product_url.startsWith('http') ? item.product_url : `https://${item.product_url}`} target="_blank" rel="noopener noreferrer">
+                            <Button variant="custom" className="bg-brand-green text-black hover:bg-brand-green/90 font-semibold border-2 border-black shadow-[-4px_4px_0px_#000] hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90">
+                                <ExternalLink className="w-4 h-4 mr-2"/>View Product Link
+                            </Button>
+                        </a>
+                    )}
+                    <DialogClose asChild>
+                        <Button variant="custom" className="bg-brand-beige text-brand-purple-dark hover:bg-brand-beige/90 font-semibold border-2 border-black shadow-[-4px_4px_0px_#000] hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90">
+                            Close
+                        </Button>
+                    </DialogClose>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     )
@@ -497,9 +720,15 @@ const ItemCard = ({ item, onClaimed }) => {
     const notImplemented = () => toast({title: "🚧 This feature isn't implemented yet—but don't worry! You can request it in your next prompt! 🚀"});
     const [showFullDescription, setShowFullDescription] = useState(false);
 
+    // Function to truncate description to approximately 2 lines
+    const truncateDescription = (text, maxLength = 120) => {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength).trim() + '...';
+    };
+
     return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="border-2 border-black flex flex-col">
-        <div className="relative aspect-square bg-gray-100">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="border-2 border-black flex flex-col bg-white h-full">
+        <div className="relative aspect-square bg-gray-100 h-[250px]">
              <ImagePreviewModal item={item} trigger={
                 <button className="w-full h-full">
                     {item.image_url ? 
@@ -509,34 +738,37 @@ const ItemCard = ({ item, onClaimed }) => {
                 </button>
             } />
         </div>
-        <div className="p-4 flex flex-col flex-grow space-y-4">
-            <div>
-                <h3 className="text-lg font-bold flex-grow">{item.name}</h3>
+        <div className="p-4 flex flex-col flex-grow">
+            <div className="flex-grow">
+                <h3 className="text-lg font-bold">{item.name}</h3>
                 {item.description && (
-                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                        {item.description}
-                    </p>
+                    <div className="text-sm text-gray-600 mt-1">
+                        {item.description.length > 120 ? (
+                            <div>
+                                <span>{truncateDescription(item.description)}</span>
+                                <DescriptionModal item={item} trigger={
+                                    <button className="text-brand-purple-dark hover:underline font-semibold ml-1">
+                                        Read more
+                                    </button>
+                                } />
+                            </div>
+                        ) : (
+                            <span>{item.description}</span>
+                        )}
+                    </div>
                 )}
-                <ImagePreviewModal item={item} trigger={
-                    <button className="text-sm text-brand-purple-dark hover:underline font-semibold">
-                        Read more
-                    </button>
-                } />
             </div>
             
-            <div className="flex justify-between items-center mt-auto pt-4">
-                <span className="font-bold text-lg text-brand-purple-dark">
-                    {item.unit_price_estimate ? `~₦${Number(item.unit_price_estimate).toLocaleString()}` : 'Price TBD'}
-                </span>
-                <span className={`text-sm ${isFullyClaimed ? 'text-green-600 font-bold' : 'text-gray-500'}`}>
-                    {item.qty_claimed || 0}/{item.qty_total} claimed
-                </span>
-            </div>
-            
-            <div className="flex flex-col gap-2">
-                <Button variant="custom" className="bg-brand-orange text-black disabled:bg-gray-300 w-full" disabled={isFullyClaimed} onClick={notImplemented}>
-                    <DollarSign className="w-4 h-4 mr-2"/> Send Money
-                </Button>
+            <div className="mt-auto space-y-4 pt-4">
+                <div className="flex justify-between items-center">
+                    <span className="font-bold text-lg text-brand-purple-dark">
+                        {item.unit_price_estimate ? `₦${Number(item.unit_price_estimate).toLocaleString()}` : 'Price TBD'}
+                    </span>
+                    <span className={`text-sm ${isFullyClaimed ? 'text-green-600 font-bold' : 'text-gray-500'}`}>
+                        {item.qty_claimed || 0}/{item.qty_total} claimed
+                    </span>
+                </div>
+                
                 <ClaimItemModal 
                     item={item} 
                     onClaimed={onClaimed}
@@ -559,14 +791,20 @@ const GoalCard = ({ goal, index, recipientEmail, onContributed }) => {
     const textColor = buttonColor === 'bg-brand-purple-light' ? 'text-black' : 'text-black';
 
     return (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="border-2 border-black p-6 space-y-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="border-2 border-black p-6 space-y-4 bg-white">
             <h3 className="text-2xl font-bold text-brand-purple-dark">{goal.title}</h3>
             <div>
                 <div className="flex justify-between text-sm mb-1">
                     <span className="font-semibold">Raised: ₦{Number(goal.amount_raised || 0).toLocaleString()}</span>
                     <span className="font-semibold">Target: ₦{Number(goal.target_amount).toLocaleString()}</span>
                 </div>
-                <Progress value={progress} />
+                <div className="relative h-4 w-full overflow-hidden border-2 border-black bg-gray-200">
+                    <div className={`h-full transition-all ${getProgressColor(progress)}`} style={{width: `${progress}%`}}></div>
+                </div>
+                <div className="flex justify-between text-xs mt-1">
+                    <span>{progress}% Complete</span>
+                    <span className="font-semibold">{getProgressColor(progress).replace('bg-', '').replace('brand-', '').replace('-', ' ')}</span>
+                </div>
             </div>
 
             <ContributeModal goal={goal} recipientEmail={recipientEmail} onContributed={onContributed} trigger={<Button variant="custom" className={`w-full ${buttonColor} ${textColor}`}>Contribute to this Goal</Button>} />

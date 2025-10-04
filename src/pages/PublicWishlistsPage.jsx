@@ -44,7 +44,7 @@ const PublicWishlistsPage = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-12">
+      <main className="max-w-7xl mx-auto px-4 py-12 md:px-0">
         {loading ? (
           <div className="flex justify-center items-center min-h-[40vh]">
             <Loader2 className="h-16 w-16 animate-spin text-brand-purple-dark" />
@@ -62,10 +62,9 @@ const PublicWishlistsPage = () => {
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -5, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' }}
-                  className="border-2 border-black p-4 flex flex-col space-y-4 h-full"
+                  className="border-2 border-black p-4 flex flex-col space-y-4 h-full bg-white"
                 >
-                  <div className="relative aspect-video bg-gray-100 mb-2">
+                  <div className="relative aspect-square bg-gray-100 mb-2 h-[250px]">
                     {wishlist.cover_image_url ?
                       <img alt={wishlist.title} src={wishlist.cover_image_url} className="w-full h-full object-cover" /> :
                       <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="w-12 h-12" /></div>

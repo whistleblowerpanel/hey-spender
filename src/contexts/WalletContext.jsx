@@ -54,7 +54,7 @@ export const WalletProvider = ({ children }) => {
     if (!authLoading) {
       fetchWalletData();
     }
-  }, [user, authLoading, fetchWalletData]);
+  }, [user, authLoading]);
   
   const value = {
     wallet,
