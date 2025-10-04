@@ -675,54 +675,234 @@ const WalletView = () => {
 };
 
 const SettingsView = ({ user }) => {
+  const { updatePassword, updateEmail } = useAuth();
   const [profile, setProfile] = useState({
     full_name: user?.user_metadata?.full_name || '',
-    username: user?.user_metadata?.username || ''
+    username: user?.user_metadata?.username || '',
+    email: user?.email || ''
   });
-    const [loading, setLoading] = useState(false);
-    const { toast } = useToast();
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const { toast } = useToast();
 
   const handleProfileUpdate = async (e) => {
-        e.preventDefault();
-        setLoading(true);
+    e.preventDefault();
+    setLoading(true);
     
     const { error } = await supabase.auth.updateUser({
       data: {
         full_name: profile.full_name,
         username: profile.username
       }
-        });
+    });
 
-        if (error) {
+    if (error) {
       toast({ variant: 'destructive', title: 'Error updating profile', description: error.message });
-        } else {
+    } else {
       toast({ title: 'Profile updated successfully!' });
     }
     
-        setLoading(false);
-    };
+    setLoading(false);
+  };
 
-    return (
-    <div className="space-y-6">
-      <div className="border-2 border-black p-6 bg-white">
-        <h2 className="text-2xl font-bold text-brand-purple-dark mb-4">Profile Settings</h2>
+  const handlePasswordUpdate = async (e) => {
+    e.preventDefault();
+    
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({ variant: 'destructive', title: 'Error', description: 'New passwords do not match' });
+      return;
+    }
+    
+    if (passwordData.newPassword.length < 6) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Password must be at least 6 characters long' });
+      return;
+    }
+    
+    setPasswordLoading(true);
+    
+    try {
+      const { error } = await updatePassword(passwordData.newPassword);
+      
+      if (error) {
+        toast({ variant: 'destructive', title: 'Error updating password', description: error.message });
+      } else {
+        toast({ title: 'Password updated successfully!' });
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      }
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'An unexpected error occurred' });
+    }
+    
+    setPasswordLoading(false);
+  };
+
+  const handleEmailUpdate = async (e) => {
+    e.preventDefault();
+    
+    if (!profile.email || !profile.email.includes('@')) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Please enter a valid email address' });
+      return;
+    }
+    
+    setEmailLoading(true);
+    
+    try {
+      const { error } = await updateEmail(profile.email);
+      
+      if (error) {
+        toast({ variant: 'destructive', title: 'Error updating email', description: error.message });
+      } else {
+        toast({ title: 'Email update initiated! Please check your email for confirmation.' });
+      }
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'An unexpected error occurred' });
+    }
+    
+    setEmailLoading(false);
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      {/* Profile Settings */}
+      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
+        <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Profile Settings</h2>
         <form onSubmit={handleProfileUpdate} className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="full_name">Full Name</Label>
-                    <Input id="full_name" value={profile.full_name} onChange={(e) => setProfile({...profile, full_name: e.target.value })}/>
-                </div>
-                 <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input id="username" value={profile.username} onChange={(e) => setProfile({...profile, username: e.target.value })}/>
-                </div>
-                <div className="flex justify-end">
-                    <Button type="submit" variant="custom" className="bg-brand-green text-black shadow-none" disabled={loading}>
-                        {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2"/>}
-                        Save Profile
-                    </Button>
-                </div>
-            </form>
+          <div className="space-y-2">
+            <Label htmlFor="full_name" className="text-sm sm:text-base font-medium">Full Name</Label>
+            <Input 
+              id="full_name" 
+              value={profile.full_name} 
+              onChange={(e) => setProfile({...profile, full_name: e.target.value })}
+              placeholder="Enter your full name"
+              className="text-base sm:text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="username" className="text-sm sm:text-base font-medium">Username</Label>
+            <Input 
+              id="username" 
+              value={profile.username} 
+              onChange={(e) => setProfile({...profile, username: e.target.value })}
+              placeholder="Enter your username"
+              className="text-base sm:text-sm"
+            />
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button 
+              type="submit" 
+              variant="custom" 
+              className="bg-brand-green text-black shadow-none w-full sm:w-auto text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-2" 
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2"/>}
+              <span className="sm:inline">Save Profile</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {/* Email Settings */}
+      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
+        <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Email Settings</h2>
+        <form onSubmit={handleEmailUpdate} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-sm sm:text-base font-medium">Email Address</Label>
+            <Input 
+              id="email" 
+              type="email"
+              value={profile.email} 
+              onChange={(e) => setProfile({...profile, email: e.target.value })}
+              placeholder="Enter your email address"
+              className="text-base sm:text-sm"
+            />
+            <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
+              Changing your email will require verification of the new address.
+            </p>
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button 
+              type="submit" 
+              variant="custom" 
+              className="bg-brand-orange text-black shadow-none w-full sm:w-auto text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-2" 
+              disabled={emailLoading}
+            >
+              {emailLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2"/>}
+              <span className="sm:inline">Update Email</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {/* Password Settings */}
+      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
+        <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Password Settings</h2>
+        <form onSubmit={handlePasswordUpdate} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="newPassword" className="text-sm sm:text-base font-medium">New Password</Label>
+            <Input 
+              id="newPassword" 
+              type="password"
+              value={passwordData.newPassword} 
+              onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value })}
+              placeholder="Enter new password"
+              minLength={6}
+              className="text-base sm:text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword" className="text-sm sm:text-base font-medium">Confirm New Password</Label>
+            <Input 
+              id="confirmPassword" 
+              type="password"
+              value={passwordData.confirmPassword} 
+              onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value })}
+              placeholder="Confirm new password"
+              minLength={6}
+              className="text-base sm:text-sm"
+            />
+          </div>
+          <div className="text-xs sm:text-sm text-gray-500 space-y-1 bg-gray-50 p-3 rounded-md">
+            <p>• Password must be at least 6 characters long</p>
+            <p>• Use a combination of letters, numbers, and symbols for better security</p>
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button 
+              type="submit" 
+              variant="custom" 
+              className="bg-brand-purple-dark text-white shadow-none w-full sm:w-auto text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-2" 
+              disabled={passwordLoading}
+            >
+              {passwordLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2"/>}
+              <span className="sm:inline">Update Password</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {/* Account Information */}
+      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
+        <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Account Information</h2>
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+            <span className="text-gray-600 text-sm sm:text-base font-medium">Account ID:</span>
+            <span className="font-mono text-xs sm:text-sm bg-gray-100 px-2 py-1 rounded break-all">{user?.id}</span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+            <span className="text-gray-600 text-sm sm:text-base font-medium">Member since:</span>
+            <span className="text-sm sm:text-base">{user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+            <span className="text-gray-600 text-sm sm:text-base font-medium">Last sign in:</span>
+            <span className="text-sm sm:text-base">{user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : 'N/A'}</span>
+          </div>
         </div>
+      </div>
     </div>
   );
 };
