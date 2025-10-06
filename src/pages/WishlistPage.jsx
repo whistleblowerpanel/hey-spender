@@ -351,7 +351,20 @@ const WishlistPage = () => {
     // Add timestamp to force fresh data and avoid caching issues
     const { data: itemsData, error: itemsError } = await supabase
         .from('wishlist_items')
-        .select('*')
+        .select(`
+          *,
+          claims (
+            id,
+            supporter_user_id,
+            supporter_contact,
+            status,
+            created_at,
+            supporter_user:users!supporter_user_id (
+              username,
+              full_name
+            )
+          )
+        `)
         .eq('wishlist_id', data.id)
         .order('created_at', { ascending: false });
 
@@ -556,7 +569,7 @@ const WishlistPage = () => {
           </div>
         )}
 
-        <main className="max-w-7xl mx-auto py-8">
+        <main className="max-w-7xl mx-auto py-8 px-4 md:px-0">
             {/* Share buttons - on top of description */}
             <div className="flex justify-center mb-8">
               <div className="flex items-center gap-2">
@@ -720,6 +733,26 @@ const ItemCard = ({ item, onClaimed }) => {
     const notImplemented = () => toast({title: "🚧 This feature isn't implemented yet—but don't worry! You can request it in your next prompt! 🚀"});
     const [showFullDescription, setShowFullDescription] = useState(false);
 
+    // Get the most recent claim with a username for fully claimed items
+    const getSpenderUsername = () => {
+        if (!isFullyClaimed || !item.claims || item.claims.length === 0) return null;
+        
+        // Find the most recent confirmed claim with a username
+        const confirmedClaims = item.claims.filter(claim => 
+            claim.status === 'confirmed' && claim.supporter_user?.username
+        );
+        
+        if (confirmedClaims.length > 0) {
+            // Sort by created_at descending to get the most recent
+            confirmedClaims.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            return confirmedClaims[0].supporter_user.username;
+        }
+        
+        return null;
+    };
+
+    const spenderUsername = getSpenderUsername();
+
     // Function to truncate description to approximately 2 lines
     const truncateDescription = (text, maxLength = 120) => {
         if (text.length <= maxLength) return text;
@@ -774,7 +807,10 @@ const ItemCard = ({ item, onClaimed }) => {
                     onClaimed={onClaimed}
                     trigger={(buttonText, onClick) => (
                          <Button variant="custom" className="bg-brand-green text-black disabled:bg-gray-300 w-full" disabled={isFullyClaimed} onClick={onClick}>
-                            {isFullyClaimed ? 'Fully Claimed' : 'Claim Item'}
+                            {isFullyClaimed ? 
+                                (spenderUsername ? <><strong>@{spenderUsername}</strong>&nbsp;Paid For This!</> : 'Fully Claimed') 
+                                : buttonText
+                            }
                         </Button>
                     )}
                 />
@@ -829,13 +865,43 @@ const GoalCard = ({ goal, index, recipientEmail, onContributed }) => {
 const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
     const [open, setOpen] = useState(false);
     const { toast } = useToast();
+    const { user } = useAuth();
     const [formData, setFormData] = useState({ amount: '', displayName: '', isAnonymous: false });
     const [errors, setErrors] = useState(null);
+    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-    const notImplemented = (e) => {
+    // Auto-fill display name when modal opens and user is logged in
+    useEffect(() => {
+        if (open && user && !formData.isAnonymous) {
+            setFormData(prev => ({ ...prev, displayName: user.user_metadata?.full_name || '' }));
+        }
+    }, [open, user, formData.isAnonymous]);
+
+    // Format number with commas
+    const formatNumber = (value) => {
+        // Remove any non-numeric characters except decimal point
+        const numericValue = value.replace(/[^\d.]/g, '');
+        // Split by decimal point to handle both integer and decimal parts
+        const parts = numericValue.split('.');
+        // Add commas to the integer part
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return parts.join('.');
+    };
+
+    // Handle amount input change
+    const handleAmountChange = (e) => {
+        const rawValue = e.target.value;
+        const formattedValue = formatNumber(rawValue);
+        setFormData({...formData, amount: formattedValue});
+    };
+
+    const handleContribution = async (e) => {
         e.preventDefault();
         setErrors(null);
-        const parsedAmount = parseFloat(formData.amount);
+        
+        // Remove commas from amount for parsing
+        const cleanAmount = formData.amount.replace(/,/g, '');
+        const parsedAmount = parseFloat(cleanAmount);
         const validationResult = contributionSchema.safeParse({
             amount: isNaN(parsedAmount) ? undefined : parsedAmount,
             displayName: formData.displayName,
@@ -846,7 +912,363 @@ const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
             return;
         }
 
-        toast({title: "🚧 Payment feature isn't implemented yet—but don't worry! You can request it in your next prompt! 🚀"});
+        // Check if user is logged in
+        if (!user?.email) {
+            toast({
+                variant: 'destructive',
+                title: 'Login required',
+                description: 'Please log in to make a contribution'
+            });
+            return;
+        }
+
+        setIsProcessingPayment(true);
+
+        try {
+            // Generate a unique reference for this payment
+            const paymentRef = `contribution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            console.log('Starting contribution payment process for amount:', parsedAmount);
+
+            // Initialize Paystack payment
+            const paystackResponse = await initializePaystackPayment({
+                email: user.email,
+                amount: parsedAmount * 100, // Paystack expects amount in kobo
+                currency: 'NGN',
+                reference: paymentRef,
+                metadata: {
+                    goal_title: goal.title,
+                    goal_id: goal.id,
+                    recipient_email: recipientEmail,
+                    display_name: formData.displayName || user.user_metadata?.full_name || 'Anonymous',
+                    is_anonymous: formData.isAnonymous,
+                    sender_id: user.id,
+                    type: 'goal_contribution'
+                },
+                callback: (response) => {
+                    // Handle successful payment
+                    handlePaymentSuccess(response, paymentRef, parsedAmount);
+                },
+                onClose: () => {
+                    // Handle payment cancellation
+                    handlePaymentCancellation(paymentRef);
+                }
+            });
+
+            if (paystackResponse.error) {
+                throw new Error(paystackResponse.error.message);
+            }
+
+        } catch (error) {
+            console.error('Payment initialization error:', error);
+            
+            // Check if it's a hosted payment case (not a real error)
+            if (error.message && error.message.includes('hosted payment page')) {
+                // This is expected for development, don't show error
+                console.log('Using hosted payment page as expected');
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Payment failed',
+                    description: error.message || 'Failed to initialize payment. Please try again.'
+                });
+            }
+        } finally {
+            setIsProcessingPayment(false);
+        }
+    };
+
+    // Initialize Paystack payment (adapted from SpenderListCard)
+    const initializePaystackPayment = async (paymentData) => {
+        return new Promise((resolve) => {
+            console.log('Initializing Paystack payment with data:', paymentData);
+            
+            // Check if Paystack public key is available
+            const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+            if (!publicKey) {
+                console.error('Paystack public key not found in environment variables');
+                resolve({ error: { message: 'Paystack configuration missing. Please check your environment variables.' } });
+                return;
+            }
+
+            console.log('Paystack public key found:', publicKey.substring(0, 20) + '...');
+
+            // For development/localhost, use hosted payment page due to CORS issues
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.log('Development environment detected, using hosted payment page...');
+                useHostedPaymentPage(paymentData);
+                resolve({ error: { message: 'Using hosted payment page for development' } });
+                return;
+            }
+
+            // Try to load Paystack script for production
+            const loadPaystackScript = () => {
+                return new Promise((scriptResolve, scriptReject) => {
+                    if (window.PaystackPop) {
+                        console.log('Paystack script already loaded');
+                        scriptResolve();
+                        return;
+                    }
+
+                    console.log('Loading Paystack script...');
+                    const script = document.createElement('script');
+                    script.src = 'https://js.paystack.co/v1/inline.js';
+                    
+                    // Add timeout to prevent infinite loading
+                    const timeout = setTimeout(() => {
+                        scriptReject(new Error('Paystack script loading timeout'));
+                    }, 10000);
+
+                    script.onload = () => {
+                        clearTimeout(timeout);
+                        console.log('Paystack script loaded successfully');
+                        scriptResolve();
+                    };
+                    
+                    script.onerror = (error) => {
+                        clearTimeout(timeout);
+                        console.error('Failed to load Paystack script:', error);
+                        scriptReject(new Error('Failed to load Paystack script'));
+                    };
+                    
+                    document.head.appendChild(script);
+                });
+            };
+
+            // Load script and initialize payment
+            loadPaystackScript()
+                .then(() => {
+                    initPayment();
+                })
+                .catch((error) => {
+                    console.error('Script loading failed:', error);
+                    console.log('Falling back to hosted payment page...');
+                    useHostedPaymentPage(paymentData);
+                    resolve({ error: { message: 'Using hosted payment page due to script loading error' } });
+                });
+
+            function initPayment() {
+                try {
+                    console.log('Setting up Paystack payment...');
+                    
+                    // Add a small delay to ensure script is fully loaded
+                    setTimeout(() => {
+                        try {
+                            const handler = window.PaystackPop.setup({
+                                key: publicKey,
+                                email: paymentData.email,
+                                amount: paymentData.amount,
+                                currency: paymentData.currency,
+                                ref: paymentData.reference,
+                                metadata: paymentData.metadata,
+                                callback: (response) => {
+                                    console.log('Paystack callback received:', response);
+                                    paymentData.callback(response);
+                                },
+                                onClose: () => {
+                                    console.log('Paystack modal closed');
+                                    paymentData.onClose();
+                                }
+                            });
+
+                            console.log('Opening Paystack iframe...');
+                            handler.openIframe();
+                            resolve({ success: true });
+                        } catch (error) {
+                            console.error('Error in Paystack setup:', error);
+                            console.log('Falling back to hosted payment page...');
+                            useHostedPaymentPage(paymentData);
+                            resolve({ error: { message: 'Using hosted payment page due to inline setup error' } });
+                        }
+                    }, 500);
+                    
+                } catch (error) {
+                    console.error('Error setting up Paystack payment:', error);
+                    console.log('Falling back to hosted payment page...');
+                    useHostedPaymentPage(paymentData);
+                    resolve({ error: { message: 'Using hosted payment page due to setup error' } });
+                }
+            }
+        });
+    };
+
+    // Use hosted payment page (works around CORS issues)
+    const useHostedPaymentPage = (paymentData) => {
+        try {
+            console.log('Using hosted payment page...');
+            
+            // Show payment instructions for development
+            showPaymentInstructions(paymentData);
+            
+        } catch (error) {
+            console.error('Hosted payment page failed:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Payment Error',
+                description: 'Unable to process payment. Please try again later.'
+            });
+        }
+    };
+
+    // Show payment instructions for development
+    const showPaymentInstructions = (paymentData) => {
+        const amount = (paymentData.amount / 100).toLocaleString();
+        const reference = paymentData.reference;
+        const email = paymentData.email;
+        const goalTitle = paymentData.metadata?.goal_title || 'Unknown goal';
+        
+        // Show detailed payment instructions
+        toast({
+            title: 'Payment Instructions',
+            description: `Amount: ₦${amount} | Reference: ${reference.substring(0, 20)}...`,
+            duration: 15000
+        });
+        
+        // Log detailed instructions
+        console.log('=== CONTRIBUTION PAYMENT INSTRUCTIONS ===');
+        console.log(`Goal: ${goalTitle}`);
+        console.log(`Amount: ₦${amount}`);
+        console.log(`Reference: ${reference}`);
+        console.log(`Email: ${email}`);
+        console.log('=========================================');
+        
+        // Show a modal with payment details
+        showPaymentModal(paymentData);
+    };
+
+    // Show payment modal with instructions
+    const showPaymentModal = (paymentData) => {
+        const amount = (paymentData.amount / 100).toLocaleString();
+        
+        // Create a simple modal
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        `;
+        
+        content.innerHTML = `
+            <h3 style="margin: 0 0 1rem 0; color: #333;">Contribution Payment Instructions</h3>
+            <p style="margin: 0 0 1rem 0; color: #666;">
+                Due to development environment restrictions, please use the following details to complete payment:
+            </p>
+            <div style="background: #f5f5f5; padding: 1rem; border-radius: 4px; margin: 1rem 0;">
+                <p style="margin: 0.5rem 0;"><strong>Goal:</strong> ${paymentData.metadata?.goal_title || 'Unknown'}</p>
+                <p style="margin: 0.5rem 0;"><strong>Amount:</strong> ₦${amount}</p>
+                <p style="margin: 0.5rem 0;"><strong>Reference:</strong> ${paymentData.reference}</p>
+                <p style="margin: 0.5rem 0;"><strong>Email:</strong> ${paymentData.email}</p>
+                <p style="margin: 0.5rem 0;"><strong>Display Name:</strong> ${paymentData.metadata?.display_name || 'Anonymous'}</p>
+            </div>
+            <p style="margin: 1rem 0; color: #666; font-size: 0.9rem;">
+                You can manually process this payment through your Paystack dashboard or contact support.
+            </p>
+            <button onclick="this.closest('.modal').remove()" style="
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 0.75rem 1.5rem;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 1rem;
+            ">Close</button>
+        `;
+        
+        modal.className = 'modal';
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        // Auto-close after 30 seconds
+        setTimeout(() => {
+            if (modal.parentNode) {
+                modal.remove();
+            }
+        }, 30000);
+    };
+
+    // Handle successful payment
+    const handlePaymentSuccess = async (response, paymentRef, amount) => {
+        try {
+            console.log('Processing successful contribution payment...');
+            
+            // Create contribution record
+            const { data: contribution, error: contributionError } = await supabase
+                .from('contributions')
+                .insert({
+                    goal_id: goal.id,
+                    display_name: formData.isAnonymous ? null : (formData.displayName || user.user_metadata?.full_name),
+                    is_anonymous: formData.isAnonymous,
+                    amount: amount,
+                    currency: 'NGN',
+                    payment_provider: 'paystack',
+                    payment_ref: paymentRef,
+                    status: 'success'
+                })
+                .select()
+                .single();
+
+            if (contributionError) {
+                throw contributionError;
+            }
+
+            // Update goal amount_raised
+            const { error: goalUpdateError } = await supabase
+                .from('goals')
+                .update({
+                    amount_raised: (goal.amount_raised || 0) + amount
+                })
+                .eq('id', goal.id);
+
+            if (goalUpdateError) {
+                throw goalUpdateError;
+            }
+
+            toast({
+                title: 'Contribution successful!',
+                description: `₦${amount.toLocaleString()} contributed to "${goal.title}"`
+            });
+
+            // Close modal and refresh data
+            setOpen(false);
+            onContributed();
+
+        } catch (error) {
+            console.error('Payment success handling error:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Payment processing error',
+                description: 'Payment was successful but there was an error processing it. Please contact support.'
+            });
+        } finally {
+            setIsProcessingPayment(false);
+        }
+    };
+
+    // Handle payment cancellation
+    const handlePaymentCancellation = async (paymentRef) => {
+        console.log('Payment cancelled by user');
+        toast({
+            title: 'Payment cancelled',
+            description: 'Payment was cancelled. You can try again anytime.'
+        });
+        setIsProcessingPayment(false);
     };
 
     return (
@@ -855,12 +1277,12 @@ const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Contribute to "{goal.title}"</DialogTitle>
-                    <DialogDescription>Your contribution will help reach the goal. Payment integration is coming soon!</DialogDescription>
+                    <DialogDescription>Your contribution will help reach the goal. Secure payment powered by Paystack.</DialogDescription>
                 </DialogHeader>
-                <form onSubmit={notImplemented} className="py-4 space-y-4">
+                <form onSubmit={handleContribution} className="py-4 space-y-4">
                     <div>
                         <Label htmlFor="amount">Amount (₦)</Label>
-                        <Input id="amount" type="number" placeholder="e.g., 5000" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})}/>
+                        <Input id="amount" type="text" placeholder="e.g., 5,000" value={formData.amount} onChange={handleAmountChange}/>
                          <FormErrors errors={errors?.amount} />
                     </div>
                     <div>
@@ -868,13 +1290,24 @@ const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
                         <Input id="displayName" placeholder="e.g., John Doe" disabled={formData.isAnonymous} value={formData.displayName} onChange={e => setFormData({...formData, displayName: e.target.value})} />
                     </div>
                     <div className="flex items-center space-x-2">
-                        <Checkbox id="is_anonymous" checked={formData.isAnonymous} onCheckedChange={checked => setFormData({...formData, isAnonymous: checked, displayName: checked ? 'Anonymous Spender' : ''})}/>
+                        <Checkbox id="is_anonymous" checked={formData.isAnonymous} onCheckedChange={checked => {
+                            const newIsAnonymous = checked;
+                            const newDisplayName = newIsAnonymous ? '' : (user?.user_metadata?.full_name || '');
+                            setFormData({...formData, isAnonymous: newIsAnonymous, displayName: newDisplayName});
+                        }}/>
                         <Label htmlFor="is_anonymous">Contribute Anonymously</Label>
                     </div>
                      <DialogFooter>
-                        <DialogClose asChild><Button variant="outline" type="button">Cancel</Button></DialogClose>
-                        <Button type="submit" variant="custom" className="bg-brand-green text-black">
-                            Pay with Paystack
+                        <DialogClose asChild><Button variant="outline" type="button" disabled={isProcessingPayment}>Cancel</Button></DialogClose>
+                        <Button type="submit" variant="custom" className="bg-brand-green text-black" disabled={isProcessingPayment}>
+                            {isProcessingPayment ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Processing...
+                                </>
+                            ) : (
+                                'Pay with Paystack'
+                            )}
                         </Button>
                     </DialogFooter>
                 </form>

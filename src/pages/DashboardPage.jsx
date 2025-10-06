@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, Plus, Gift, Edit, Trash2, Share2, Link as LinkIcon, QrCode as ImageIcon, Save, Trash, X, Upload, Eye, ShoppingBag, Clock, ToggleLeft, ToggleRight, DollarSign, Target, Wallet as WalletIcon, ChevronsRight, Banknote, Calendar as CalendarIcon, Settings, Download } from 'lucide-react';
+import { sendWithdrawalNotifications } from '@/lib/notificationService';
+import { Loader2, Plus, Gift, Edit, Trash2, Share2, Link as LinkIcon, QrCode as ImageIcon, Save, Trash, X, Upload, Eye, EyeOff, ShoppingBag, Clock, ToggleLeft, ToggleRight, DollarSign, Target, Wallet as WalletIcon, ChevronsRight, Banknote, Calendar as CalendarIcon, Settings, Download, ArrowDown, ArrowUp, CreditCard, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
@@ -209,7 +210,11 @@ const ImageUpload = ({
 
 const DashboardPage = () => {
   const { user, loading: authLoading } = useAuth();
-  const { wallet, loading: walletLoading } = useWallet();
+  const walletContext = useWallet();
+  const { wallet, loading: walletLoading } = walletContext || {};
+  
+  console.log('DashboardPage: walletContext:', walletContext);
+  console.log('DashboardPage: user:', user?.id, 'authLoading:', authLoading);
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -233,7 +238,11 @@ const DashboardPage = () => {
   }, [authLoading]);
   
   const fetchDashboardData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('No user found, skipping dashboard data fetch');
+      return;
+    }
+    console.log('Fetching dashboard data for user:', user.id, user.email);
     setLoading(true);
 
     const wishlistsPromise = supabase.from('wishlists').select('*, goals(*)').eq('user_id', user.id).order('created_at', { ascending: false });
@@ -248,7 +257,7 @@ const DashboardPage = () => {
           wishlist:wishlists!inner(
             title,
             slug,
-            user:users!inner(username)
+            user:users!inner(id, username)
           )
         )
       `)
@@ -258,34 +267,45 @@ const DashboardPage = () => {
 
     const [wishlistsRes, claimsRes] = await Promise.all([wishlistsPromise, claimsPromise]);
 
+    console.log('Wishlists query result:', wishlistsRes);
     if (wishlistsRes.error) {
+      console.error('Wishlists query error:', wishlistsRes.error);
       toast({ variant: 'destructive', title: 'Error fetching wishlists', description: wishlistsRes.error.message });
     } else {
+      console.log('Setting wishlists:', wishlistsRes.data);
       setWishlists(wishlistsRes.data);
     }
     
+    console.log('Claims query result:', claimsRes);
     if (claimsRes.error) {
       console.error('Claims query error:', claimsRes.error);
       toast({ variant: 'destructive', title: 'Error fetching claimed items', description: claimsRes.error.message });
     } else {
       console.log('Claims data:', claimsRes.data);
+      if (claimsRes.data && claimsRes.data.length > 0) {
+        console.log('First claim structure:', claimsRes.data[0]);
+        console.log('First claim wishlist_item:', claimsRes.data[0].wishlist_item);
+        console.log('First claim wishlist_item.wishlist:', claimsRes.data[0].wishlist_item?.wishlist);
+        console.log('First claim wishlist_item.wishlist.user:', claimsRes.data[0].wishlist_item?.wishlist?.user);
+      }
       setClaims(claimsRes.data);
     }
 
     setLoading(false);
-  }, [user, toast]);
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate('/login');
+      navigate('/');
     } else if (user) {
       if (user.user_metadata?.role === 'admin') {
         navigate('/admin/dashboard');
       } else {
+        console.log('Triggering fetchDashboardData for user:', user.id);
         fetchDashboardData();
       }
     }
-  }, [user, authLoading, navigate, fetchDashboardData]);
+  }, [user, authLoading, navigate]);
 
   // Refresh data when navigating to dashboard with claims tab
   useEffect(() => {
@@ -293,7 +313,7 @@ const DashboardPage = () => {
       console.log('Refreshing dashboard data for claims tab');
       fetchDashboardData();
     }
-  }, [location.state?.defaultTab, user, fetchDashboardData]);
+  }, [location.state?.defaultTab, user]);
 
   const handleWishlistAction = updatedWishlist => {
     const existingIndex = wishlists.findIndex(w => w.id === updatedWishlist.id);
@@ -447,7 +467,7 @@ const DashboardPage = () => {
         </div>
         
         <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+          <TabsList className="w-full sm:grid sm:grid-cols-4 sm:overflow-visible">
             <TabsTrigger value="wishlists"><Gift className="w-4 h-4 mr-2" />My Wishlists</TabsTrigger>
             <TabsTrigger value="claims"><ShoppingBag className="w-4 h-4 mr-2" />My Spender List</TabsTrigger>
             <TabsTrigger value="wallet"><WalletIcon className="w-4 h-4 mr-2" />My Wallet</TabsTrigger>
@@ -642,35 +662,958 @@ const WishlistCard = ({
   );
 };
 
+// Wallet Stat Card (styled like Admin StatCard) - mobile friendly sizing
+const WalletStatCard = ({ title, value, icon, loading, bgColor = 'bg-brand-cream', textColor = 'text-black', showWithdrawButton = false, onWithdraw }) => (
+  <div className={`border-2 border-black rounded-lg p-3 sm:p-4 min-h-[80px] ${bgColor} relative after:absolute after:left-[-8px] after:bottom-[-8px] after:w-full after:h-full after:bg-black after:z-[-1]`}>
+    <div className="relative">
+      <div className="flex justify-between items-center gap-3">
+        <p className={`text-sm font-semibold uppercase ${textColor}`}>{title}</p>
+        <div className={`${textColor} flex-shrink-0`}>{icon}</div>
+      </div>
+      <div className="mt-1">
+        {loading ? <Loader2 className={`h-6 w-6 animate-spin ${textColor}`} /> : <p className={`text-2xl font-bold leading-tight ${textColor}`}>{value}</p>}
+      </div>
+      {showWithdrawButton && (
+        <div className="mt-1 flex justify-end">
+          <Button
+            onClick={onWithdraw}
+            className="bg-brand-orange hover:bg-brand-orange/90 text-black border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-base font-bold px-6 py-2 h-8 w-full max-w-[140px] flex items-center justify-center"
+          >
+            WITHDRAW
+          </Button>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 const WalletView = () => {
-  const { wallet, loading } = useWallet();
+  const { wallet, transactions, loading } = useWallet();
   const { toast } = useToast();
+  const [filterType, setFilterType] = useState('all');
+  const [visibleTransactions, setVisibleTransactions] = useState(17);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+
+  // Get withdrawal requests (payouts) for the current user
+  const [withdrawalRequests, setWithdrawalRequests] = useState([]);
+  const [loadingWithdrawals, setLoadingWithdrawals] = useState(true);
+
+  useEffect(() => {
+    const fetchWithdrawalRequests = async () => {
+      if (!wallet?.id) return;
+      
+      setLoadingWithdrawals(true);
+      try {
+        const { data, error } = await supabase
+          .from('payouts')
+          .select('*')
+          .eq('wallet_id', wallet.id)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setWithdrawalRequests(data || []);
+      } catch (error) {
+        console.error('Error fetching withdrawal requests:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Error loading withdrawal history',
+          description: 'Failed to load your withdrawal requests.'
+        });
+      } finally {
+        setLoadingWithdrawals(false);
+      }
+    };
+
+    fetchWithdrawalRequests();
+  }, [wallet?.id, toast]);
+
+  const getWithdrawalStatusColor = (status) => {
+    switch (status) {
+      case 'requested': return 'bg-brand-orange text-black';
+      case 'processing': return 'bg-brand-purple-light text-black';
+      case 'paid': return 'bg-brand-green text-black';
+      case 'failed': return 'bg-brand-accent-red text-white';
+      default: return 'bg-gray-500 text-white';
+    }
+  };
+
+  const getWithdrawalStatusText = (status) => {
+    switch (status) {
+      case 'requested': return 'Pending Review';
+      case 'processing': return 'Processing';
+      case 'paid': return 'Completed';
+      case 'failed': return 'Failed';
+      default: return 'Unknown';
+    }
+  };
+
+  // Reset visible transactions when filter changes
+  useEffect(() => {
+    setVisibleTransactions(17);
+  }, [filterType]);
+
+  const loadMore = () => {
+    setVisibleTransactions(prev => prev + 17);
+  };
+
+  const handleWithdraw = () => {
+    setShowWithdrawModal(true);
+  };
 
   if (loading) {
     return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
+  // Derived totals
+  const totalReceived = (transactions || []).filter(t => t.type === 'credit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  // Only count platform withdrawals (payouts), not sent contributions
+  const totalWithdrawn = (transactions || []).filter(t => {
+    const raw = (t.source || t.description || '').toLowerCase();
+    return raw.includes('payout') || raw.includes('withdraw');
+  }).reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  // Balance should reflect only platform wallet movements: add credits, subtract only payouts
+  const balance = (transactions || []).reduce((acc, t) => {
+    if (t.type === 'credit') return acc + Number(t.amount || 0);
+    const raw = (t.source || t.description || '').toLowerCase();
+    if (raw.includes('payout') || raw.includes('withdraw')) return acc - Number(t.amount || 0);
+    // Do not subtract sent contributions; they are paid from bank, not wallet
+    return acc;
+  }, 0);
+
+  // Group transactions by date (computed later after filtering)
+  // Placeholder; will be defined after filter
+  let filteredTransactions = transactions || [];
+  const groupedTransactions = filteredTransactions.reduce((groups, transaction) => {
+    const date = new Date(transaction.created_at).toDateString();
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+    groups[date].push(transaction);
+    return groups;
+  }, {});
+
+  const getTransactionIcon = (transaction) => {
+    if (transaction.type === 'credit') {
+      return <ChevronsRight className="w-4 h-4 text-brand-green" />;
+    } else {
+      return <Banknote className="w-4 h-4 text-brand-purple-dark" />;
+    }
+  };
+
+  const getNormalizedSource = (transaction) => {
+    const raw = (transaction.source || transaction.description || '').toLowerCase();
+    // Check the more specific token BEFORE the generic one
+    if (raw.includes('contribution_sent')) return 'sent';
+    if (raw.includes('cash_sent') || raw.includes('sent_item')) return 'sent';
+    if (raw.includes('contribution')) return 'contribution';
+    if (raw.includes('payout') || raw.includes('withdraw')) return 'payout';
+    if (raw.includes('refund')) return 'refund';
+    if (raw.includes('wishlist') || raw.includes('cash payment')) return 'wishlist_purchase';
+    // Default: any credit that isn't a contribution/refund/payout is a Cash Payment
+    if (transaction.type === 'credit') return 'wishlist_purchase';
+    return 'other';
+  };
+
+  // Filter transactions based on selected type (after helpers are defined to avoid TDZ errors)
+  const allFilteredTransactions = (transactions || []).filter(transaction => {
+    if (filterType === 'all') return true;
+    if (filterType === 'credit') {
+      const src = getNormalizedSource(transaction);
+      // Received = credits that are not "sent"
+      return transaction.type === 'credit' && src !== 'sent';
+    }
+    if (filterType === 'sent') {
+      const src = getNormalizedSource(transaction);
+      // Sent = explicit contribution_sent (we mapped as 'sent') OR debits that are not payouts
+      return src === 'sent' || (transaction.type === 'debit' && src !== 'payout');
+    }
+    if (filterType === 'debit') {
+      const src = getNormalizedSource(transaction);
+      // Withdrawn view should only show payouts
+      return src === 'payout';
+    }
+    return true;
+  });
+
+  // Limit visible transactions
+  filteredTransactions = allFilteredTransactions.slice(0, visibleTransactions);
+
+  // Recompute grouping with the new filtered list
+  const regrouped = filteredTransactions.reduce((groups, transaction) => {
+    const date = new Date(transaction.created_at).toDateString();
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(transaction);
+    return groups;
+  }, {});
+
+  const getTransactionDescription = (transaction) => {
+    if (transaction.description) {
+      return transaction.description;
+    }
+    
+    // Fallback descriptions based on source
+    const source = getNormalizedSource(transaction);
+    if (source === 'contribution') {
+      return 'Contributions received';
+    } else if (source === 'wishlist_purchase') {
+      return 'Wishlist item purchase received';
+    } else if (source === 'payout') {
+      return 'Withdrawal processed';
+    } else if (source === 'refund') {
+      return 'Refund processed';
+    } else if (source === 'sent') {
+      return 'Cash sent';
+    }
+    
+    return transaction.type === 'credit' ? 'Money received' : 'Money withdrawn';
+  };
+
+  const getTransactionAmount = (transaction) => {
+    const amount = Number(transaction.amount || 0);
+    const formattedAmount = `₦${amount.toLocaleString()}`;
+    
+    if (transaction.type === 'credit') {
+      return <span className="text-brand-green font-semibold">+{formattedAmount}</span>;
+    } else {
+      return <span className="text-brand-accent-red font-semibold">-{formattedAmount}</span>;
+    }
+  };
+
+  // Desktop badge with same colors as mobile icons
+  const getDesktopBadge = (transaction) => {
+    const source = getNormalizedSource(transaction);
+    if (source === 'sent') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-brand-accent-red"></div>
+          <span className="text-xs font-semibold">Cash Sent</span>
+        </div>
+      );
+    }
+    if (source === 'contribution') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-brand-green"></div>
+          <span className="text-xs font-semibold">Contributions</span>
+        </div>
+      );
+    }
+    if (source === 'wishlist_purchase') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-brand-purple-dark"></div>
+          <span className="text-xs font-semibold">Cash Payment</span>
+        </div>
+      );
+    }
+    if (source === 'payout') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-brand-orange"></div>
+          <span className="text-xs font-semibold">Withdrawn</span>
+        </div>
+      );
+    }
+    if (source === 'refund') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gray-200"></div>
+          <span className="text-xs font-semibold">Refund</span>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Category label for mobile rows
+  const getCategoryLabel = (transaction) => {
+    const source = getNormalizedSource(transaction);
+    if (source === 'sent') return 'Cash Sent';
+    if (source === 'contribution') return 'Contributions';
+    if (source === 'wishlist_purchase') return 'Cash Payment';
+    if (source === 'payout') return 'Withdrawn';
+    if (source === 'refund') return 'Refund';
+    return transaction.type === 'credit' ? 'Money Received' : 'Money Withdrawn';
+  };
+
+  // Helper to truncate long usernames
+  const truncateUsername = (username, maxLength = 15) => {
+    if (!username || username === '—') return '—';
+    if (username.length <= maxLength) return username;
+    return username.substring(0, maxLength) + '...';
+  };
+
+  // Relation label e.g., "From — @username" or "To — @username"
+  const getRelationLabel = (transaction) => {
+    const source = getNormalizedSource(transaction);
+    const isTo = source === 'sent' || source === 'payout';
+    const username = getDepositor(transaction);
+    const right = (username && username !== '—') ? `@${truncateUsername(username)}` : '—';
+    return `${isTo ? 'To' : 'From'} — ${right}`;
+  };
+
+  // Colored square icon per source
+  const getIconBadge = (transaction) => {
+    const source = getNormalizedSource(transaction);
+    if (source === 'sent') {
+      return (
+        <div className="w-14 h-14 sm:w-16 sm:h-16 bg-brand-accent-red flex items-center justify-center">
+          <ChevronsRight className="w-7 h-7 text-black rotate-[-90deg]" />
+        </div>
+      );
+    }
+    if (source === 'contribution') {
+      return (
+        <div className="w-14 h-14 sm:w-16 sm:h-16 bg-brand-green flex items-center justify-center">
+          <ChevronsRight className="w-7 h-7 text-black rotate-90" />
+        </div>
+      );
+    }
+    if (source === 'wishlist_purchase') {
+      return (
+        <div className="w-14 h-14 sm:w-16 sm:h-16 bg-brand-purple-dark flex items-center justify-center">
+          <ChevronsRight className="w-7 h-7 text-white rotate-90" />
+        </div>
+      );
+    }
+    if (source === 'payout') {
+      return (
+        <div className="w-14 h-14 sm:w-16 sm:h-16 bg-brand-orange flex items-center justify-center">
+          <CreditCard className="w-7 h-7 text-black" />
+        </div>
+      );
+    }
+    // default
     return (
-    <div className="space-y-6">
-      <div className="border-2 border-black p-6 bg-white">
-        <h2 className="text-2xl font-bold text-brand-purple-dark mb-4">Wallet Balance</h2>
-        <div className="text-3xl font-bold text-brand-green">
-          ₦{wallet?.balance?.toLocaleString() || '0'}
+      <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gray-200 flex items-center justify-center">
+        <WalletIcon className="w-7 h-7 text-black" />
       </div>
-        <p className="text-gray-600 mt-2">Available for withdrawals</p>
+    );
+  };
+
+  const getDepositor = (transaction) => {
+    // For Sent tab, show receiver instead of depositor
+    const source = getNormalizedSource(transaction);
+    if (source === 'sent') {
+      if (transaction.recipient_username) return transaction.recipient_username;
+      // try to parse from description "to @username"
+      const desc = typeof transaction.description === 'string' ? transaction.description : '';
+      const m = desc.match(/to\s+@([A-Za-z0-9_.-]+)/i);
+      if (m && m[1]) return m[1];
+    }
+    if (transaction.contributor_name) return transaction.contributor_name;
+    const desc = typeof transaction.description === 'string' ? transaction.description : '';
+    const src = typeof transaction.source === 'string' ? transaction.source : '';
+    // Try patterns: from @username, from username, from Name (@username)
+    let m = desc.match(/from\s+@([A-Za-z0-9_.-]+)/i);
+    if (m && m[1]) return m[1];
+    const m2 = desc.match(/from\s+[^\(\-@]+\s*\(@([A-Za-z0-9_.-]+)\)/i);
+    if (m2 && m2[1]) return m2[1];
+    const m3 = desc.match(/from\s+([A-Za-z0-9_.-]+)/i);
+    if (m3 && m3[1]) return m3[1];
+    // Look for any @username anywhere
+    const m4 = desc.match(/@([A-Za-z0-9_.-]+)/);
+    if (m4 && m4[1]) return m4[1];
+    // Fallback: parse username-like token from source field if it contains it
+    let s1 = src.match(/@([A-Za-z0-9_.-]+)/);
+    if (s1 && s1[1]) return s1[1];
+    // Exclude known keywords; pick a simple alphanumeric token as username candidate
+    const tokens = src.split(/[\s:/,;-]+/).filter(Boolean);
+    const blacklist = new Set(['wishlist_purchase', 'wishlist', 'purchase', 'contribution', 'contributions', 'payout', 'withdrawal', 'refund', 'cash_payment', 'cash', 'payment']);
+    const candidate = tokens.find(t => !blacklist.has(t.toLowerCase()) && /^[A-Za-z0-9_.-]{3,}$/.test(t));
+    if (candidate) return candidate;
+    return '—';
+  };
+
+  const getTitleDisplay = (transaction) => {
+    const raw = transaction.title || transaction.description || '';
+    const noPrefix = raw.replace(/^\s*cash\s*payment\s*for\s*/i, '').trim();
+    // remove wrapping quotes "Title" or 'Title'
+    const noQuotes = noPrefix.replace(/^"(.+)"$/,'$1').replace(/^'(.*)'$/,'$1');
+    // remove trailing hyphen and extra spaces
+    return noQuotes.replace(/\s*-\s*$/,'').trim();
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+        <WalletStatCard 
+          title="Wallet Balance" 
+          value={`₦${balance.toLocaleString()}`} 
+          icon={<WalletIcon className="w-6 h-6" />} 
+          loading={false} 
+          bgColor="bg-brand-green" 
+          textColor="text-black"
+        />
+        <WalletStatCard 
+          title="Total Received" 
+          value={`₦${totalReceived.toLocaleString()}`} 
+          icon={<ChevronsRight className="w-6 h-6" />} 
+          loading={false} 
+          bgColor="bg-brand-orange" 
+          textColor="text-black"
+        />
+        <WalletStatCard 
+          title="Total Withdrawn" 
+          value={`₦${totalWithdrawn.toLocaleString()}`} 
+          icon={<Banknote className="w-6 h-6" />} 
+          loading={false} 
+          bgColor="bg-brand-purple-dark" 
+          textColor="text-white"
+          showWithdrawButton={true}
+          onWithdraw={handleWithdraw}
+        />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <Button variant="custom" className="bg-brand-green text-black shadow-none">
-          <Banknote className="w-4 h-4 mr-2" />
-          Withdraw Funds
-        </Button>
-        <Button variant="custom" className="bg-brand-purple-dark text-white shadow-none">
-          <Target className="w-4 h-4 mr-2" />
-          Transaction History
-        </Button>
+      {/* Withdrawal History */}
+      <div className="border-2 border-black bg-white p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-brand-purple-dark">Withdrawal History</h3>
+          <Button 
+            variant="custom" 
+            className="bg-brand-green text-black"
+            onClick={handleWithdraw}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Withdrawal
+          </Button>
+        </div>
+
+        {loadingWithdrawals ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-brand-purple-dark" />
+          </div>
+        ) : withdrawalRequests.length === 0 ? (
+          <div className="text-center py-8">
+            <Banknote className="mx-auto h-12 w-12 text-gray-400" />
+            <h4 className="mt-4 text-lg font-semibold text-gray-600">No withdrawal requests</h4>
+            <p className="mt-2 text-sm text-gray-500">You haven't made any withdrawal requests yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {withdrawalRequests.map((request) => (
+              <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-lg font-semibold">₦{Number(request.amount).toLocaleString()}</span>
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getWithdrawalStatusColor(request.status)}`}>
+                        {getWithdrawalStatusText(request.status)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div><strong>Bank:</strong> {request.destination_bank_code || 'N/A'}</div>
+                      <div><strong>Account:</strong> {request.destination_account || 'N/A'}</div>
+                      <div><strong>Requested:</strong> {new Date(request.created_at).toLocaleDateString()}</div>
+                      {request.updated_at && (
+                        <div><strong>Last Updated:</strong> {new Date(request.updated_at).toLocaleDateString()}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {request.status === 'requested' && (
+                      <div className="text-xs text-brand-orange">
+                        <Clock className="w-4 h-4 inline mr-1" />
+                        Awaiting admin review
+                      </div>
+                    )}
+                    {request.status === 'processing' && (
+                      <div className="text-xs text-brand-purple-light">
+                        <Loader2 className="w-4 h-4 inline mr-1 animate-spin" />
+                        Processing...
+                      </div>
+                    )}
+                    {request.status === 'paid' && (
+                      <div className="text-xs text-brand-green">
+                        <CheckCircle className="w-4 h-4 inline mr-1" />
+                        Completed
+                      </div>
+                    )}
+                    {request.status === 'failed' && (
+                      <div className="text-xs text-brand-accent-red">
+                        <XCircle className="w-4 h-4 inline mr-1" />
+                        Failed
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Transaction History Section - Responsive */}
+      <div className="py-4 sm:py-6 px-0">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
+            <h3 className="text-2xl sm:text-3xl font-bold text-brand-purple-dark whitespace-nowrap">Transaction History</h3>
+          <div className="flex gap-2 w-full mt-4 sm:mt-0 justify-end">
+            <Button
+              variant={filterType === 'all' ? 'custom' : 'outline'}
+              className={`${filterType === 'all' ? 'bg-brand-purple-dark text-white' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+              onClick={() => setFilterType('all')}
+            >
+              All
+            </Button>
+            <Button
+              variant={filterType === 'credit' ? 'custom' : 'outline'}
+              className={`${filterType === 'credit' ? 'bg-brand-green text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+              onClick={() => setFilterType('credit')}
+            >
+              Received
+            </Button>
+            <Button
+              variant={filterType === 'sent' ? 'custom' : 'outline'}
+              className={`${filterType === 'sent' ? 'bg-brand-salmon text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+              onClick={() => setFilterType('sent')}
+            >
+              Sent
+            </Button>
+            <Button
+              variant={filterType === 'debit' ? 'custom' : 'outline'}
+              className={`${filterType === 'debit' ? 'bg-brand-orange text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+              onClick={() => setFilterType('debit')}
+            >
+              Withdrawn
+            </Button>
+          </div>
+        </div>
+
+        {/* Empty state */}
+        {filteredTransactions.length === 0 ? (
+          <div className="text-center py-8">
+            <CalendarIcon className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-4 text-lg font-semibold text-gray-600">No transactions found</h3>
+            <p className="mt-2 text-sm text-gray-500">
+              {filterType === 'all' 
+                ? "You haven't made any transactions yet." 
+                : `No ${filterType === 'credit' ? 'money received' : 'withdrawals'} found.`
+              }
+            </p>
+          </div>
+        ) : (
+          <div>
+            {/* Mobile list view - redesigned */}
+            <div className="md:hidden">
+              {Object.entries(regrouped).map(([date, transactions]) => (
+                <div key={date} className="mb-6">
+                  <div className="text-sm font-medium text-gray-600 mb-3">
+                    {format(new Date(date), 'd MMMM yyyy')}
+                  </div>
+                  {transactions.map((t) => (
+                    <div key={t.id} className="py-6 px-0 border-b border-gray-200 last:border-b-0">
+                      <div className="flex items-center gap-3">
+                        {getIconBadge(t)}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-black truncate">
+                                {getTitleDisplay(t) || getTransactionDescription(t)}
+                              </div>
+                              <div className="text-xs text-gray-600 mt-1">{getCategoryLabel(t)}</div>
+                            </div>
+                            <div className="text-right ml-2 whitespace-nowrap">
+                              <div className="text-sm font-semibold">{getTransactionAmount(t)}</div>
+                              <div className="text-xs text-gray-600 mt-1">{getRelationLabel(t)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(filteredTransactions || []).map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="whitespace-nowrap">{getDesktopBadge(t)}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {getDepositor(t) && getDepositor(t) !== '—' ? (
+                          <a href={`/${getDepositor(t)}`} className="font-semibold text-brand-purple-dark hover:underline">@{truncateUsername(getDepositor(t))}</a>
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell className="max-w-[300px] truncate text-sm font-semibold">{getTitleDisplay(t) || getTransactionDescription(t)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-semibold">{getTransactionAmount(t)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-gray-600">{format(new Date(t.created_at), 'PP p')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+
+        {/* Load More Button */}
+        {allFilteredTransactions.length > visibleTransactions && (
+          <div className="flex justify-center mt-6">
+            <Button
+              variant="outline"
+              onClick={loadMore}
+              className="border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] px-6 py-2"
+            >
+              Load More
+            </Button>
+          </div>
+        )}
+        </div>
+
+      {/* Withdraw Modal */}
+      <WithdrawModal 
+        open={showWithdrawModal} 
+        onOpenChange={setShowWithdrawModal}
+        wallet={wallet}
+        balance={balance}
+      />
     </div>
+  );
+};
+
+// Withdraw Modal Component
+const WithdrawModal = ({ open, onOpenChange, wallet, balance }) => {
+  const [withdrawData, setWithdrawData] = useState({
+    amount: '',
+    bankCode: '',
+    accountNumber: '',
+    accountName: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!wallet?.id) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Wallet not found. Please try again later.'
+      });
+      return;
+    }
+
+    const amount = parseFloat(withdrawData.amount);
+    if (!amount || amount <= 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Amount',
+        description: 'Please enter a valid withdrawal amount.'
+      });
+      return;
+    }
+
+    if (amount > balance) {
+      toast({
+        variant: 'destructive',
+        title: 'Insufficient Balance',
+        description: `You can only withdraw up to ₦${balance.toLocaleString()}.`
+      });
+      return;
+    }
+
+    if (amount < 1000) {
+      toast({
+        variant: 'destructive',
+        title: 'Minimum Amount',
+        description: 'Minimum withdrawal amount is ₦1,000.'
+      });
+      return;
+    }
+
+    if (!withdrawData.bankCode || !withdrawData.accountNumber || !withdrawData.accountName) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Information',
+        description: 'Please fill in all bank account details.'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Determine initial status based on amount and user verification
+      const AUTO_APPROVAL_LIMIT = 5000; // ₦5,000 auto-approval limit
+      const isVerifiedUser = user?.email_verified || user?.user_metadata?.verified;
+      const shouldAutoApprove = amount <= AUTO_APPROVAL_LIMIT && isVerifiedUser;
+      
+      const initialStatus = shouldAutoApprove ? 'processing' : 'requested';
+      
+      const { data: payoutData, error } = await supabase
+        .from('payouts')
+        .insert({
+          wallet_id: wallet.id,
+          amount: amount,
+          destination_bank_code: withdrawData.bankCode,
+          destination_account: withdrawData.accountNumber,
+          status: initialStatus,
+          provider: 'manual'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Send notifications
+      try {
+        if (shouldAutoApprove) {
+          // For auto-approved withdrawals, notify user immediately
+          await sendWithdrawalNotifications.onStatusChange(payoutData, 'requested', 'processing');
+        } else {
+          // For manual review withdrawals, notify admins
+          await sendWithdrawalNotifications.onNewWithdrawal(payoutData);
+        }
+      } catch (notificationError) {
+        console.error('Notification error:', notificationError);
+        // Don't fail the withdrawal if notifications fail
+      }
+
+      // If auto-approved, create wallet transaction immediately
+      if (shouldAutoApprove && payoutData) {
+        const { error: txError } = await supabase
+          .from('wallet_transactions')
+          .insert({
+            wallet_id: wallet.id,
+            type: 'debit',
+            source: 'payout',
+            amount: amount,
+            description: `Withdrawal to ${withdrawData.bankCode} ${withdrawData.accountNumber} - Auto-approved`
+          });
+
+        if (txError) {
+          console.error('Error creating wallet transaction:', txError);
+          // Don't throw error here, just log it
+        }
+      }
+
+      const statusMessage = shouldAutoApprove 
+        ? 'Your withdrawal has been automatically approved and is now processing! Funds will be transferred within 1-2 business days.'
+        : 'Your withdrawal request has been submitted and will be processed within 24-48 hours. You will receive email notifications when the status changes.';
+
+      toast({
+        title: shouldAutoApprove ? 'Withdrawal Auto-Approved!' : 'Withdrawal Request Submitted',
+        description: statusMessage
+      });
+
+      setWithdrawData({
+        amount: '',
+        bankCode: '',
+        accountNumber: '',
+        accountName: ''
+      });
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Withdrawal error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Withdrawal Failed',
+        description: error.message || 'Failed to submit withdrawal request. Please try again.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAmountChange = (value) => {
+    // Only allow numbers and one decimal point
+    const cleanValue = value.replace(/[^0-9.]/g, '');
+    const parts = cleanValue.split('.');
+    if (parts.length > 2) return; // Only one decimal point allowed
+    if (parts[1] && parts[1].length > 2) return; // Only 2 decimal places
+    setWithdrawData(prev => ({ ...prev, amount: cleanValue }));
+  };
+
+  // Check if current amount qualifies for auto-approval
+  const currentAmount = parseFloat(withdrawData.amount) || 0;
+  const AUTO_APPROVAL_LIMIT = 5000;
+  const isVerifiedUser = user?.email_verified || user?.user_metadata?.verified;
+  const willAutoApprove = currentAmount > 0 && currentAmount <= AUTO_APPROVAL_LIMIT && isVerifiedUser;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Request Withdrawal</DialogTitle>
+          <DialogDescription>
+            Withdraw funds from your wallet to your bank account. Processing takes 24-48 hours.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Processing Time Information */}
+        <div className="bg-brand-orange/10 border border-brand-orange rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Clock className="w-5 h-5 text-brand-orange mt-0.5" />
+            <div>
+              <div className="font-semibold text-brand-orange text-sm">Processing Timeline</div>
+              <div className="text-xs text-gray-700 mt-1 space-y-1">
+                <div>• <strong>Request Submitted:</strong> Immediate confirmation</div>
+                <div>• <strong>Admin Review:</strong> Within 24 hours</div>
+                <div>• <strong>Processing:</strong> 24-48 hours after approval</div>
+                <div>• <strong>Funds Transfer:</strong> 1-2 business days</div>
+              </div>
+              <div className="text-xs text-gray-600 mt-2">
+                You'll receive email notifications at each step.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Auto-Approval Information */}
+        <div className="bg-brand-green/10 border border-brand-green rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-brand-green mt-0.5" />
+            <div>
+              <div className="font-semibold text-brand-green text-sm">Auto-Approval Available</div>
+              <div className="text-xs text-gray-700 mt-1">
+                Withdrawals of ₦5,000 or less are automatically approved for verified users and processed immediately!
+              </div>
+              <div className="text-xs text-gray-600 mt-2">
+                Larger amounts require manual admin review for security.
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="amount">Amount (₦)</Label>
+            <Input
+              id="amount"
+              type="text"
+              placeholder="0.00"
+              value={withdrawData.amount}
+              onChange={(e) => handleAmountChange(e.target.value)}
+              required
+              className="shadow-none"
+            />
+            <p className="text-xs text-gray-500">
+              Available balance: ₦{balance.toLocaleString()}
+            </p>
+            {currentAmount > 0 && (
+              <div className={`text-xs p-2 rounded ${
+                willAutoApprove 
+                  ? 'bg-brand-green/10 text-brand-green border border-brand-green' 
+                  : 'bg-brand-orange/10 text-brand-orange border border-brand-orange'
+              }`}>
+                {willAutoApprove ? (
+                  <div className="flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    <span>This withdrawal will be auto-approved and processed immediately!</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    <span>This withdrawal requires admin review (24-48 hours)</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bankCode">Bank</Label>
+            <Select value={withdrawData.bankCode} onValueChange={(value) => setWithdrawData(prev => ({ ...prev, bankCode: value }))}>
+              <SelectTrigger className="shadow-none">
+                <SelectValue placeholder="Select your bank" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="044">Access Bank</SelectItem>
+                <SelectItem value="023">Citibank</SelectItem>
+                <SelectItem value="050">Ecobank</SelectItem>
+                <SelectItem value="011">First Bank</SelectItem>
+                <SelectItem value="214">First City Monument Bank</SelectItem>
+                <SelectItem value="070">Fidelity Bank</SelectItem>
+                <SelectItem value="058">GTBank</SelectItem>
+                <SelectItem value="030">Heritage Bank</SelectItem>
+                <SelectItem value="301">Jaiz Bank</SelectItem>
+                <SelectItem value="082">Keystone Bank</SelectItem>
+                <SelectItem value="221">Kuda Bank</SelectItem>
+                <SelectItem value="526">Opay</SelectItem>
+                <SelectItem value="327">PalmPay</SelectItem>
+                <SelectItem value="076">Polaris Bank</SelectItem>
+                <SelectItem value="101">Providus Bank</SelectItem>
+                <SelectItem value="221">Stanbic IBTC Bank</SelectItem>
+                <SelectItem value="068">Standard Chartered Bank</SelectItem>
+                <SelectItem value="232">Sterling Bank</SelectItem>
+                <SelectItem value="100">Suntrust Bank</SelectItem>
+                <SelectItem value="032">Union Bank</SelectItem>
+                <SelectItem value="033">United Bank for Africa</SelectItem>
+                <SelectItem value="215">Unity Bank</SelectItem>
+                <SelectItem value="035">Wema Bank</SelectItem>
+                <SelectItem value="057">Zenith Bank</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="accountNumber">Account Number</Label>
+            <Input
+              id="accountNumber"
+              type="text"
+              placeholder="Enter account number"
+              value={withdrawData.accountNumber}
+              onChange={(e) => setWithdrawData(prev => ({ ...prev, accountNumber: e.target.value.replace(/\D/g, '') }))}
+              required
+              className="shadow-none"
+              maxLength={10}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="accountName">Account Name</Label>
+            <Input
+              id="accountName"
+              type="text"
+              placeholder="Enter account holder name"
+              value={withdrawData.accountName}
+              onChange={(e) => setWithdrawData(prev => ({ ...prev, accountName: e.target.value }))}
+              required
+              className="shadow-none"
+            />
+          </div>
+
+          <div className="bg-blue-50 p-3 rounded-md">
+            <p className="text-sm text-blue-800">
+              <strong>Important:</strong> Please ensure your account details are correct. 
+              Incorrect details may result in failed transactions and additional charges.
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              className="shadow-none"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              variant="custom" 
+              className="bg-brand-orange text-black shadow-none"
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowUp className="w-4 h-4 mr-2" />}
+              Request Withdrawal
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -679,8 +1622,10 @@ const SettingsView = ({ user }) => {
   const [profile, setProfile] = useState({
     full_name: user?.user_metadata?.full_name || '',
     username: user?.user_metadata?.username || '',
-    email: user?.email || ''
+    email: user?.email || '',
+    phone: user?.user_metadata?.phone || ''
   });
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -689,23 +1634,177 @@ const SettingsView = ({ user }) => {
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [usernameChecking, setUsernameChecking] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState(null); // 'available', 'taken', 'checking', null
+  const usernameTimeoutRef = useRef(null);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
+
+  // Load profile data from database on component mount
+  useEffect(() => {
+    const loadProfileData = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('full_name, username, email, phone')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) {
+          console.error('Error loading profile data:', error);
+          return;
+        }
+        
+        if (data) {
+          setProfile({
+            full_name: data.full_name || '',
+            username: data.username || '',
+            email: data.email || user.email || '',
+            phone: data.phone || ''
+          });
+        }
+      } catch (error) {
+        console.error('Error loading profile data:', error);
+      } finally {
+        setProfileLoaded(true);
+      }
+    };
+    
+    loadProfileData();
+  }, [user?.id, user?.email]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (usernameTimeoutRef.current) {
+        clearTimeout(usernameTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Check if username is available
+  const checkUsernameAvailability = async (username) => {
+    if (!username || username === user?.user_metadata?.username) {
+      setUsernameStatus('available');
+      return true; // Current username is always available
+    }
+    
+    setUsernameStatus('checking');
+    setUsernameChecking(true);
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .single();
+      
+      const isAvailable = !data; // Return true if no user found (available)
+      setUsernameStatus(isAvailable ? 'available' : 'taken');
+      setUsernameChecking(false);
+      return isAvailable;
+    } catch (error) {
+      setUsernameStatus('available'); // If error, assume available
+      setUsernameChecking(false);
+      return true;
+    }
+  };
+
+  // Debounced username checking
+  const debouncedUsernameCheck = useCallback((username) => {
+    // Clear existing timeout
+    if (usernameTimeoutRef.current) {
+      clearTimeout(usernameTimeoutRef.current);
+    }
+    
+    // Reset status immediately
+    setUsernameStatus(null);
+    
+    // Set new timeout
+    usernameTimeoutRef.current = setTimeout(() => {
+      checkUsernameAvailability(username);
+    }, 500); // 500ms delay
+  }, [user?.user_metadata?.username]);
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
     
-    const { error } = await supabase.auth.updateUser({
-      data: {
-        full_name: profile.full_name,
-        username: profile.username
+    // Validate required fields
+    if (!profile.full_name.trim()) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: 'Full name is required.' });
+      setLoading(false);
+      return;
+    }
+    
+    if (!profile.username.trim()) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: 'Username is required.' });
+      setLoading(false);
+      return;
+    }
+    
+    // Validate username format (alphanumeric and underscores only)
+    if (!/^[a-zA-Z0-9_]+$/.test(profile.username)) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: 'Username can only contain letters, numbers, and underscores.' });
+      setLoading(false);
+      return;
+    }
+    
+    // Check if username is available if it's different from current
+    if (profile.username !== user?.user_metadata?.username) {
+      if (usernameStatus === 'taken') {
+        toast({ variant: 'destructive', title: 'Username not available', description: 'This username is already taken. Please choose a different one.' });
+        setLoading(false);
+        return;
       }
-    });
+      
+      // If status is null or checking, do a final check
+      if (usernameStatus === null || usernameStatus === 'checking') {
+        const isAvailable = await checkUsernameAvailability(profile.username);
+        if (!isAvailable) {
+          toast({ variant: 'destructive', title: 'Username not available', description: 'This username is already taken. Please choose a different one.' });
+          setLoading(false);
+          return;
+        }
+      }
+    }
+    
+    try {
+      // Update the users table in the database
+      const { error: dbError } = await supabase
+        .from('users')
+        .update({
+          full_name: profile.full_name,
+          username: profile.username,
+          phone: profile.phone || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
 
-    if (error) {
-      toast({ variant: 'destructive', title: 'Error updating profile', description: error.message });
-    } else {
-      toast({ title: 'Profile updated successfully!' });
+      if (dbError) {
+        toast({ variant: 'destructive', title: 'Error updating profile', description: dbError.message });
+        setLoading(false);
+        return;
+      }
+
+      // Also update the auth user metadata for consistency
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          full_name: profile.full_name,
+          username: profile.username,
+          phone: profile.phone
+        }
+      });
+
+      if (authError) {
+        toast({ variant: 'destructive', title: 'Error updating auth profile', description: authError.message });
+      } else {
+        toast({ title: 'Profile updated successfully!' });
+      }
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error updating profile', description: 'An unexpected error occurred' });
     }
     
     setLoading(false);
@@ -753,6 +1852,23 @@ const SettingsView = ({ user }) => {
     setEmailLoading(true);
     
     try {
+      // First update the users table in the database
+      const { error: dbError } = await supabase
+        .from('users')
+        .update({
+          email: profile.email,
+          phone: profile.phone || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (dbError) {
+        toast({ variant: 'destructive', title: 'Error updating email', description: dbError.message });
+        setEmailLoading(false);
+        return;
+      }
+
+      // Then update the auth email
       const { error } = await updateEmail(profile.email);
       
       if (error) {
@@ -767,38 +1883,90 @@ const SettingsView = ({ user }) => {
     setEmailLoading(false);
   };
 
+  if (!profileLoaded) {
+    return (
+      <div className="flex justify-center items-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-purple-dark" />
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       {/* Profile Settings */}
-      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
+      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg flex flex-col h-full">
         <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Profile Settings</h2>
-        <form onSubmit={handleProfileUpdate} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="full_name" className="text-sm sm:text-base font-medium">Full Name</Label>
-            <Input 
-              id="full_name" 
-              value={profile.full_name} 
-              onChange={(e) => setProfile({...profile, full_name: e.target.value })}
-              placeholder="Enter your full name"
-              className="text-base sm:text-sm"
-            />
+        <form onSubmit={handleProfileUpdate} className="flex flex-col h-full space-y-4">
+          <div className="flex-1 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="full_name" className="text-sm sm:text-base font-medium">Full Name</Label>
+              <Input 
+                id="full_name" 
+                value={profile.full_name} 
+                onChange={(e) => setProfile({...profile, full_name: e.target.value })}
+                placeholder="Enter your full name"
+                className="text-base sm:text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="username" className="text-sm sm:text-base font-medium">Username</Label>
+              <div className="relative">
+                <Input 
+                  id="username" 
+                  value={profile.username} 
+                  onChange={(e) => {
+                    const newUsername = e.target.value;
+                    setProfile({...profile, username: newUsername });
+                    if (newUsername.trim()) {
+                      debouncedUsernameCheck(newUsername);
+                    } else {
+                      setUsernameStatus(null);
+                    }
+                  }}
+                  placeholder="Enter your username"
+                  className="text-base sm:text-sm pr-10"
+                />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  {usernameStatus === 'checking' && (
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  )}
+                  {usernameStatus === 'available' && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  {usernameStatus === 'taken' && (
+                    <XCircle className="w-4 h-4 text-red-500" />
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">
+                  Username can only contain letters, numbers, and underscores.
+                </span>
+                {usernameStatus === 'available' && profile.username && (
+                  <span className="text-green-600 font-medium">✓ Available</span>
+                )}
+                {usernameStatus === 'taken' && (
+                  <span className="text-red-600 font-medium">✗ Taken</span>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-sm sm:text-base font-medium">Phone Number</Label>
+              <Input 
+                id="phone" 
+                value={profile.phone} 
+                onChange={(e) => setProfile({...profile, phone: e.target.value })}
+                placeholder="Enter your phone number"
+                className="text-base sm:text-sm"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="username" className="text-sm sm:text-base font-medium">Username</Label>
-            <Input 
-              id="username" 
-              value={profile.username} 
-              onChange={(e) => setProfile({...profile, username: e.target.value })}
-              placeholder="Enter your username"
-              className="text-base sm:text-sm"
-            />
-          </div>
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end pt-2 mt-auto">
             <Button 
               type="submit" 
               variant="custom" 
               className="bg-brand-green text-black shadow-none w-full sm:w-auto text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-2" 
-              disabled={loading}
+              disabled={loading || usernameStatus === 'taken' || usernameStatus === 'checking'}
             >
               {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2"/>}
               <span className="sm:inline">Save Profile</span>
@@ -808,24 +1976,39 @@ const SettingsView = ({ user }) => {
       </div>
 
       {/* Email Settings */}
-      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
+      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg flex flex-col h-full">
         <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Email Settings</h2>
-        <form onSubmit={handleEmailUpdate} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm sm:text-base font-medium">Email Address</Label>
-            <Input 
-              id="email" 
-              type="email"
-              value={profile.email} 
-              onChange={(e) => setProfile({...profile, email: e.target.value })}
-              placeholder="Enter your email address"
-              className="text-base sm:text-sm"
-            />
-            <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
-              Changing your email will require verification of the new address.
-            </p>
+        <form onSubmit={handleEmailUpdate} className="flex flex-col h-full space-y-4">
+          <div className="flex-1 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm sm:text-base font-medium">Email Address</Label>
+              <Input 
+                id="email" 
+                type="email"
+                value={profile.email} 
+                onChange={(e) => setProfile({...profile, email: e.target.value })}
+                placeholder="Enter your email address"
+                className="text-base sm:text-sm"
+              />
+              <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
+                Changing your email will require verification of the new address.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone_email" className="text-sm sm:text-base font-medium">Phone Number</Label>
+              <Input 
+                id="phone_email" 
+                value={profile.phone} 
+                onChange={(e) => setProfile({...profile, phone: e.target.value })}
+                placeholder="Enter your phone number"
+                className="text-base sm:text-sm"
+              />
+              <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
+                This will be updated along with your email.
+              </p>
+            </div>
           </div>
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end pt-2 mt-auto">
             <Button 
               type="submit" 
               variant="custom" 
@@ -840,38 +2023,66 @@ const SettingsView = ({ user }) => {
       </div>
 
       {/* Password Settings */}
-      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
+      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg flex flex-col h-full">
         <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Password Settings</h2>
-        <form onSubmit={handlePasswordUpdate} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="newPassword" className="text-sm sm:text-base font-medium">New Password</Label>
-            <Input 
-              id="newPassword" 
-              type="password"
-              value={passwordData.newPassword} 
-              onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value })}
-              placeholder="Enter new password"
-              minLength={6}
-              className="text-base sm:text-sm"
-            />
+        <form onSubmit={handlePasswordUpdate} className="flex flex-col h-full space-y-4">
+          <div className="flex-1 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword" className="text-sm sm:text-base font-medium">New Password</Label>
+              <div className="relative">
+                <Input 
+                  id="newPassword" 
+                  type={showNewPassword ? "text" : "password"}
+                  value={passwordData.newPassword} 
+                  onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value })}
+                  placeholder="Enter new password"
+                  minLength={6}
+                  className="text-base sm:text-sm pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-sm sm:text-base font-medium">Confirm New Password</Label>
+              <div className="relative">
+                <Input 
+                  id="confirmPassword" 
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={passwordData.confirmPassword} 
+                  onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value })}
+                  placeholder="Confirm new password"
+                  minLength={6}
+                  className="text-base sm:text-sm pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="text-xs sm:text-sm text-gray-500 space-y-1 bg-gray-50 p-3 rounded-md">
+              <p>• Password must be at least 6 characters long</p>
+              <p>• Use a combination of letters, numbers, and symbols for better security</p>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-sm sm:text-base font-medium">Confirm New Password</Label>
-            <Input 
-              id="confirmPassword" 
-              type="password"
-              value={passwordData.confirmPassword} 
-              onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value })}
-              placeholder="Confirm new password"
-              minLength={6}
-              className="text-base sm:text-sm"
-            />
-          </div>
-          <div className="text-xs sm:text-sm text-gray-500 space-y-1 bg-gray-50 p-3 rounded-md">
-            <p>• Password must be at least 6 characters long</p>
-            <p>• Use a combination of letters, numbers, and symbols for better security</p>
-          </div>
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end pt-2 mt-auto">
             <Button 
               type="submit" 
               variant="custom" 
@@ -886,20 +2097,20 @@ const SettingsView = ({ user }) => {
       </div>
 
       {/* Account Information */}
-      <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg">
-        <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Account Information</h2>
-        <div className="space-y-3">
+      <div className="border-2 border-black p-4 sm:p-6 bg-brand-purple-dark rounded-lg flex flex-col h-full">
+        <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">Account Information</h2>
+        <div className="flex-1 space-y-3">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-            <span className="text-gray-600 text-sm sm:text-base font-medium">Account ID:</span>
-            <span className="font-mono text-xs sm:text-sm bg-gray-100 px-2 py-1 rounded break-all">{user?.id}</span>
+            <span className="text-white/80 text-sm sm:text-base font-medium">Account ID:</span>
+            <span className="font-mono text-xs sm:text-sm bg-white/20 text-white px-2 py-1 rounded break-all">{user?.id}</span>
           </div>
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-            <span className="text-gray-600 text-sm sm:text-base font-medium">Member since:</span>
-            <span className="text-sm sm:text-base">{user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</span>
+            <span className="text-white/80 text-sm sm:text-base font-medium">Member since:</span>
+            <span className="text-white text-sm sm:text-base">{user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</span>
           </div>
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-            <span className="text-gray-600 text-sm sm:text-base font-medium">Last sign in:</span>
-            <span className="text-sm sm:text-base">{user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : 'N/A'}</span>
+            <span className="text-white/80 text-sm sm:text-base font-medium">Last sign in:</span>
+            <span className="text-white text-sm sm:text-base">{user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : 'N/A'}</span>
           </div>
         </div>
       </div>

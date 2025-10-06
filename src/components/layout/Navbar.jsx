@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ArrowRight, User, LogOut, LayoutGrid, Gift, Sparkles } from 'lucide-react';
+import { Menu, X, ArrowRight, User, LogOut, LayoutGrid, Gift, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { useToast } from '@/components/ui/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const {
     user,
     signOut
   } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -25,8 +28,32 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    if (isSigningOut) return; // Prevent multiple sign out attempts
+    
+    setIsSigningOut(true);
+    try {
+      const { error } = await signOut();
+      // The improved signOut function always returns success for session_not_found
+      // So we can always show success and navigate
+      toast({
+        title: 'Signed out successfully',
+        description: 'You have been logged out'
+      });
+      // Small delay to ensure auth state is updated before navigation
+      setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 100);
+    } catch (error) {
+      // This should rarely happen now with the improved error handling
+      toast({
+        variant: 'destructive',
+        title: 'Sign out failed',
+        description: 'An unexpected error occurred'
+      });
+      console.error('Sign out error:', error);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
   return <>
       <header className="fixed top-4 left-0 right-0 z-50 px-4">
@@ -71,9 +98,18 @@ const Navbar = () => {
                       <span>Profile</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleSignOut}>
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log out</span>
+                    <DropdownMenuItem onClick={handleSignOut} disabled={isSigningOut}>
+                      {isSigningOut ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <span>Signing out...</span>
+                        </>
+                      ) : (
+                        <>
+                          <LogOut className="mr-2 h-4 w-4" />
+                          <span>Log out</span>
+                        </>
+                      )}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -127,7 +163,16 @@ const Navbar = () => {
                    <Button onClick={() => {
             handleSignOut();
             setMobileMenuOpen(false);
-          }} variant="custom" className="bg-brand-salmon text-black w-full">Log Out</Button>
+          }} variant="custom" className="bg-brand-salmon text-black w-full" disabled={isSigningOut}>
+            {isSigningOut ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <span>Signing out...</span>
+              </>
+            ) : (
+              <span>Log Out</span>
+            )}
+          </Button>
                 </div> : <div className="flex flex-col space-y-2">
                   <Button onClick={() => {
             navigate('/login');

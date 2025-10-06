@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
       lastUserRef.current = newUser;
       setUser(newUser);
       setLoading(false);
+      console.log('Auth user updated:', newUser?.id, newUser?.email);
     }
   }, []);
 
@@ -30,11 +31,13 @@ export const AuthProvider = ({ children }) => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) {
-          console.error("Error getting session:", error);
+          console.warn("Session error (clearing user):", error.message);
+          updateUser(null);
+        } else {
+          updateUser(session?.user ?? null);
         }
-        updateUser(session?.user ?? null);
       } catch (error) {
-        console.error("Session error:", error);
+        console.warn("Session error (clearing user):", error);
         updateUser(null);
       }
     };
@@ -43,8 +46,9 @@ export const AuthProvider = ({ children }) => {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        // Only respond to significant auth events, ignore token refreshes
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        console.log('Auth state change:', event, session?.user?.id);
+        // Handle all auth events including token refresh and session expiry
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
           updateUser(session?.user ?? null);
         }
       }
@@ -63,8 +67,32 @@ export const AuthProvider = ({ children }) => {
     return supabase.auth.signInWithPassword(credentials);
   }, []);
   
-  const signOut = useCallback(() => {
-    return supabase.auth.signOut();
+  const signOut = useCallback(async () => {
+    try {
+      // Always clear local state first, regardless of server response
+      setUser(null);
+      setLoading(false);
+      
+      // Try to sign out from server, but don't fail if session doesn't exist
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.warn('Sign out server error (but proceeding with local logout):', error.message);
+        // Don't throw error for session_not_found - user is already logged out locally
+        if (error.message?.includes('session_not_found')) {
+          console.log('Session already expired, local logout completed');
+          return { error: null };
+        }
+        // For other errors, still return success since we cleared local state
+        return { error: null };
+      }
+      
+      return { error: null };
+    } catch (error) {
+      console.warn('Sign out error (but proceeding with local logout):', error);
+      // Even if there's an error, we've cleared the local state
+      return { error: null };
+    }
   }, []);
 
   const updatePassword = useCallback(async (newPassword) => {

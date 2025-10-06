@@ -22,6 +22,7 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
     const [reminderTime, setReminderTime] = useState('');
     const [cashAmount, setCashAmount] = useState(item?.unit_price_estimate || '');
     const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+    const [isPaymentSuccessful, setIsPaymentSuccessful] = useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
     
@@ -333,6 +334,10 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
     const handlePaymentSuccess = async (response, paymentRef) => {
         try {
             console.log('Processing successful payment...');
+            console.log('Item data in payment success:', item);
+            console.log('Recipient ID:', item.wishlist?.user?.id);
+            console.log('Wishlist data:', item.wishlist);
+            console.log('User data:', item.wishlist?.user);
             
             // Credit recipient's wallet directly
             await creditRecipientWallet(
@@ -350,6 +355,7 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
 
             setShowCashDialog(false);
             setCashAmount('');
+            setIsPaymentSuccessful(true);
 
         } catch (error) {
             console.error('Payment success handling error:', error);
@@ -376,6 +382,13 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
     // Credit recipient's wallet
     const creditRecipientWallet = async (recipientId, amount, paymentRef, paystackRef, paystackTrans) => {
         try {
+            console.log('creditRecipientWallet called with recipientId:', recipientId);
+            console.log('creditRecipientWallet amount:', amount);
+            
+            if (!recipientId) {
+                throw new Error('Recipient ID is undefined');
+            }
+            
             // Get or create recipient's wallet
             let { data: wallet, error: walletError } = await supabase
                 .from('wallets')
@@ -514,6 +527,8 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
     }
 
     console.log('SpenderListCard rendering with item:', item);
+    console.log('Item wishlist data:', item?.wishlist);
+    console.log('Item wishlist user data:', item?.wishlist?.user);
 
     return (
         <motion.div 
@@ -571,9 +586,10 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                                 <Button 
                                     variant="custom" 
                                     className="bg-brand-green text-black flex-1 shadow-none"
+                                    disabled={isPaymentSuccessful}
                                 >
                                     <Wallet className="w-4 h-4 mr-1"/>
-                                    Send Cash
+                                    {isPaymentSuccessful ? 'Payment Sent!' : 'Send Cash'}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
@@ -620,13 +636,14 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                             <Button 
                                 variant="custom" 
                                 className="bg-brand-orange text-black flex-1 shadow-none"
+                                disabled={isPaymentSuccessful}
                                 onClick={() => {
                                     console.log('Opening product URL:', item.product_url);
                                     window.open(item.product_url, '_blank');
                                 }}
                             >
                                 <ExternalLink className="w-4 h-4 mr-1"/>
-                                Purchase Item
+                                {isPaymentSuccessful ? 'Payment Sent!' : 'Purchase Item'}
                             </Button>
                         )}
                     </div>
@@ -637,9 +654,10 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                                 <Button 
                                     variant="custom" 
                                     className="bg-brand-purple-dark text-white flex-1 shadow-none"
+                                    disabled={isPaymentSuccessful}
                                 >
                                     <Clock className="w-4 h-4 mr-1"/>
-                                    Set Reminder
+                                    {isPaymentSuccessful ? 'Payment Sent!' : 'Set Reminder'}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
@@ -696,10 +714,11 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                         <Button 
                             variant="custom" 
                             className="bg-white text-black flex-1 shadow-none"
+                            disabled={isPaymentSuccessful}
                             onClick={handleAddToCalendar}
                         >
                             <CalendarIcon className="w-4 h-4 mr-1"/>
-                            Add to Calendar
+                            {isPaymentSuccessful ? 'Payment Sent!' : 'Add to Calendar'}
                         </Button>
                     </div>
                     
@@ -708,9 +727,10 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                             <Button 
                                 variant="custom" 
                                 className="bg-red-500 text-white w-full shadow-none"
+                                disabled={isPaymentSuccessful}
                             >
                                 <Trash2 className="w-4 h-4 mr-1"/>
-                                Remove from List
+                                {isPaymentSuccessful ? 'Payment Sent!' : 'Remove from List'}
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>

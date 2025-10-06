@@ -231,6 +231,7 @@ export interface Database {
           payment_provider: string | null;
           payment_ref: string | null;
           status: ContributionStatus | null;
+          supporter_user_id: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -243,6 +244,7 @@ export interface Database {
           payment_provider?: string | null;
           payment_ref?: string | null;
           status?: ContributionStatus | null;
+          supporter_user_id?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -255,6 +257,7 @@ export interface Database {
           payment_provider?: string | null;
           payment_ref?: string | null;
           status?: ContributionStatus | null;
+          supporter_user_id?: string | null;
           created_at?: string | null;
         };
       };
