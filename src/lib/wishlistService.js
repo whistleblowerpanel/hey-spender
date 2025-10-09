@@ -390,16 +390,17 @@ export const itemsService = {
   }
 };
 
-// Image upload service - LOCAL STORAGE
+// Image upload service - SIMPLIFIED VERSION
 export const imageService = {
   async uploadCoverImage(file, userId) {
     // Check if we're in production
-    if (import.meta.env.PROD) {
-      // In production, return a placeholder or throw a user-friendly error
-      throw new Error('Image uploads are currently not available in production. Please use existing images from the media library or contact support for assistance.');
+    const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
+    
+    if (isProduction) {
+      throw new Error('Image uploads are not available in production. Please use existing images or contact support.');
     }
 
-    // Use original file extension
+    // Development: Use original file extension
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `${userId}-${Date.now()}.${fileExt}`;
 
@@ -408,28 +409,40 @@ export const imageService = {
     formData.append('file', file);
     formData.append('fileName', fileName);
 
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Upload failed');
+      if (!response.ok) {
+        let errorMessage = 'Upload failed';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch (e) {
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      return data.url;
+
+    } catch (error) {
+      throw error;
     }
-
-    const data = await response.json();
-    return data.url;
   },
 
   async uploadItemImage(file, userId) {
     // Check if we're in production
-    if (import.meta.env.PROD) {
-      // In production, return a placeholder or throw a user-friendly error
-      throw new Error('Image uploads are currently not available in production. Please use existing images from the media library or contact support for assistance.');
+    const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
+    
+    if (isProduction) {
+      throw new Error('Image uploads are not available in production. Please use existing images or contact support.');
     }
 
-    // Use original file extension
+    // Development: Use original file extension
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `${userId}-${Date.now()}.${fileExt}`;
 
@@ -438,17 +451,28 @@ export const imageService = {
     formData.append('file', file);
     formData.append('fileName', fileName);
 
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Upload failed');
+      if (!response.ok) {
+        let errorMessage = 'Upload failed';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch (e) {
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      return data.url;
+
+    } catch (error) {
+      throw error;
     }
-
-    const data = await response.json();
-    return data.url;
   }
 };
