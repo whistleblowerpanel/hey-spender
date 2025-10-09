@@ -14,17 +14,39 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { format } from 'date-fns';
 
-const SpenderListCard = ({ item, claimId, onRemove }) => {
+const SpenderListCard = ({ claim, onUpdateClaim, onDelete, onViewWishlist }) => {
+    const item = claim?.wishlist_items;
+    const claimId = claim?.id;
+    
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showCashDialog, setShowCashDialog] = useState(false);
     const [showReminderDialog, setShowReminderDialog] = useState(false);
     const [reminderDate, setReminderDate] = useState();
     const [reminderTime, setReminderTime] = useState('');
-    const [cashAmount, setCashAmount] = useState(item?.unit_price_estimate || '');
     const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-    const [isPaymentSuccessful, setIsPaymentSuccessful] = useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
+    
+    // Calculate payment tracking
+    const amountPaid = claim?.amount_paid || 0;
+    const itemPrice = parseFloat(item?.unit_price_estimate) || 0;
+    const remainingBalance = Math.max(0, itemPrice - amountPaid);
+    const isFullyPaid = itemPrice > 0 && amountPaid >= itemPrice;
+    
+    // Debug logging
+    console.log('💳 SpenderListCard - Payment tracking:', {
+        claimId,
+        itemName: item?.name,
+        amountPaid,
+        itemPrice,
+        remainingBalance,
+        isFullyPaid
+    });
+    
+    // Set cash amount to remaining balance if there's a partial payment, otherwise full price
+    const [cashAmount, setCashAmount] = useState(
+        remainingBalance > 0 && amountPaid > 0 ? remainingBalance : (item?.unit_price_estimate || '')
+    );
     
     const notImplemented = () => {
         console.log("Feature not implemented yet");
@@ -66,8 +88,8 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                 reference: paymentRef,
                 metadata: {
                     item_name: item.name,
-                    recipient: item.wishlist?.user?.username,
-                    recipient_id: item.wishlist?.user?.id,
+                    recipient: item.wishlists?.users?.username,
+                    recipient_id: item.wishlists?.users?.id,
                     sender_id: user.id,
                     item_id: item.id,
                     claim_id: claimId,
@@ -335,27 +357,39 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
         try {
             console.log('Processing successful payment...');
             console.log('Item data in payment success:', item);
-            console.log('Recipient ID:', item.wishlist?.user?.id);
-            console.log('Wishlist data:', item.wishlist);
-            console.log('User data:', item.wishlist?.user);
+            console.log('Recipient ID:', item.wishlists?.users?.id);
+            console.log('Wishlist data:', item.wishlists);
+            console.log('User data:', item.wishlists?.users);
             
-            // Credit recipient's wallet directly
+            const paymentAmount = parseFloat(cashAmount);
+            const newAmountPaid = amountPaid + paymentAmount;
+            const shouldBeFulfilled = itemPrice > 0 && newAmountPaid >= itemPrice;
+            
+            // Update claim with new amount_paid FIRST
+            // Don't update status - UI handles button disabling based on amount_paid
+            await onUpdateClaim(claimId, {
+                amount_paid: newAmountPaid
+            });
+            
+            // Then credit recipient's wallet (with claim_id link)
             await creditRecipientWallet(
-                item.wishlist?.user?.id, 
-                parseFloat(cashAmount), 
+                item.wishlists?.users?.id, 
+                paymentAmount, 
                 paymentRef,
                 response.reference,
-                response.trans
+                response.trans,
+                claimId // Pass claim ID to link transaction
             );
 
             toast({
                 title: 'Payment successful!',
-                description: `₦${Number(cashAmount).toLocaleString()} has been sent to ${item.wishlist?.user?.username}'s wallet`
+                description: shouldBeFulfilled 
+                    ? `₦${Number(paymentAmount).toLocaleString()} sent! Item fully paid.`
+                    : `₦${Number(paymentAmount).toLocaleString()} sent! Balance: ₦${Number(itemPrice - newAmountPaid).toLocaleString()}`
             });
 
             setShowCashDialog(false);
             setCashAmount('');
-            setIsPaymentSuccessful(true);
 
         } catch (error) {
             console.error('Payment success handling error:', error);
@@ -380,10 +414,11 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
     };
 
     // Credit recipient's wallet
-    const creditRecipientWallet = async (recipientId, amount, paymentRef, paystackRef, paystackTrans) => {
+    const creditRecipientWallet = async (recipientId, amount, paymentRef, paystackRef, paystackTrans, claimIdParam) => {
         try {
             console.log('creditRecipientWallet called with recipientId:', recipientId);
             console.log('creditRecipientWallet amount:', amount);
+            console.log('creditRecipientWallet claimId:', claimIdParam);
             
             if (!recipientId) {
                 throw new Error('Recipient ID is undefined');
@@ -424,7 +459,7 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                 if (updateError) throw updateError;
             }
 
-            // Create wallet transaction record
+            // Create wallet transaction record with claim_id link
             const { error: transactionError } = await supabase
                 .from('wallet_transactions')
                 .insert({
@@ -432,7 +467,8 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                     type: 'credit',
                     source: 'cash_payment',
                     amount: amount,
-                    description: `Cash payment for "${item.name}" - Ref: ${paymentRef}`
+                    description: `Cash payment for "${item.name}" - Ref: ${paymentRef}`,
+                    claim_id: claimIdParam // Link transaction to claim
                 });
 
             if (transactionError) throw transactionError;
@@ -479,7 +515,7 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
     // Add to Calendar functionality
     const handleAddToCalendar = () => {
         const eventTitle = `Purchase: ${item.name}`;
-        const eventDescription = `Don't forget to purchase "${item.name}" from ${item.wishlist?.user?.username}'s wishlist. Price: ₦${Number(item.unit_price_estimate || 0).toLocaleString()}`;
+        const eventDescription = `Don't forget to purchase "${item.name}" from ${item.wishlists?.users?.username}'s wishlist. Price: ₦${Number(item.unit_price_estimate || 0).toLocaleString()}`;
         const eventLocation = item.product_url || 'Online';
         
         // Create calendar event data
@@ -551,7 +587,7 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                 {/* Item Info */}
                 <div className="flex-grow">
                     <Link 
-                        to={`/${item.wishlist?.user?.username}/${item.wishlist?.slug}`}
+                        to={`/${item.wishlists?.users?.username}/${item.wishlists?.slug}`}
                         className="text-xl font-bold hover:text-brand-purple-dark transition-colors cursor-pointer block overflow-hidden mb-3"
                         style={{
                             display: '-webkit-box',
@@ -574,9 +610,30 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                             {item.unit_price_estimate ? `₦${Number(item.unit_price_estimate).toLocaleString()}` : 'Price TBD'}
                         </span>
                         <span className="text-xs text-gray-500">
-                            From: {item.wishlist?.user?.username || 'Unknown'}
+                            From: {item.wishlists?.users?.username || 'Unknown'}
                         </span>
                     </div>
+                    
+                    {/* Payment Progress - Show only if there's been a payment */}
+                    {amountPaid > 0 && (
+                        <div className="mb-3 p-2 bg-gray-50 rounded border border-gray-200">
+                            <div className="flex justify-between text-sm mb-1">
+                                <span className="text-gray-600">Paid:</span>
+                                <span className="font-semibold text-green-600">₦{Number(amountPaid).toLocaleString()}</span>
+                            </div>
+                            {!isFullyPaid && remainingBalance > 0 && (
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Balance:</span>
+                                    <span className="font-semibold text-orange-600">₦{Number(remainingBalance).toLocaleString()}</span>
+                                </div>
+                            )}
+                            {isFullyPaid && (
+                                <div className="text-center text-sm font-semibold text-green-600 mt-1">
+                                    ✓ Fully Paid
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Action Buttons */}
                     <div className="space-y-2">
@@ -585,18 +642,18 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                             <DialogTrigger asChild>
                                 <Button 
                                     variant="custom" 
-                                    className="bg-brand-green text-black flex-1 shadow-none"
-                                    disabled={isPaymentSuccessful}
+                                    className={`flex-1 shadow-none ${isFullyPaid ? 'bg-gray-300 text-gray-600' : 'bg-brand-green text-black'}`}
+                                    disabled={isFullyPaid}
                                 >
                                     <Wallet className="w-4 h-4 mr-1"/>
-                                    {isPaymentSuccessful ? 'Payment Sent!' : 'Send Cash'}
+                                    {isFullyPaid ? 'Fully Paid' : 'Send Cash'}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
                                     <DialogTitle>Send Cash for "{item.name}"</DialogTitle>
                                     <DialogDescription>
-                                        Send money to {item.wishlist?.user?.username || 'the recipient'} for this item.
+                                        Send money to {item.wishlists?.users?.username || 'the recipient'} for this item.
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4">
@@ -635,15 +692,15 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                         {item.product_url && (
                             <Button 
                                 variant="custom" 
-                                className="bg-brand-orange text-black flex-1 shadow-none"
-                                disabled={isPaymentSuccessful}
+                                className={`flex-1 shadow-none ${isFullyPaid ? 'bg-gray-300 text-gray-600' : 'bg-brand-orange text-black'}`}
+                                disabled={isFullyPaid}
                                 onClick={() => {
                                     console.log('Opening product URL:', item.product_url);
                                     window.open(item.product_url, '_blank');
                                 }}
                             >
                                 <ExternalLink className="w-4 h-4 mr-1"/>
-                                {isPaymentSuccessful ? 'Payment Sent!' : 'Purchase Item'}
+                                {isFullyPaid ? 'Fully Paid' : 'Purchase Item'}
                             </Button>
                         )}
                     </div>
@@ -653,11 +710,11 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                             <DialogTrigger asChild>
                                 <Button 
                                     variant="custom" 
-                                    className="bg-brand-purple-dark text-white flex-1 shadow-none"
-                                    disabled={isPaymentSuccessful}
+                                    className={`flex-1 shadow-none ${isFullyPaid ? 'bg-gray-300 text-gray-600' : 'bg-brand-purple-dark text-white'}`}
+                                    disabled={isFullyPaid}
                                 >
                                     <Clock className="w-4 h-4 mr-1"/>
-                                    {isPaymentSuccessful ? 'Payment Sent!' : 'Set Reminder'}
+                                    {isFullyPaid ? 'Fully Paid' : 'Set Reminder'}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
@@ -713,12 +770,12 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                         
                         <Button 
                             variant="custom" 
-                            className="bg-white text-black flex-1 shadow-none"
-                            disabled={isPaymentSuccessful}
+                            className={`flex-1 shadow-none ${isFullyPaid ? 'bg-gray-300 text-gray-600' : 'bg-white text-black'}`}
+                            disabled={isFullyPaid}
                             onClick={handleAddToCalendar}
                         >
                             <CalendarIcon className="w-4 h-4 mr-1"/>
-                            {isPaymentSuccessful ? 'Payment Sent!' : 'Add to Calendar'}
+                            {isFullyPaid ? 'Fully Paid' : 'Add to Calendar'}
                         </Button>
                     </div>
                     
@@ -726,11 +783,11 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                         <AlertDialogTrigger asChild>
                             <Button 
                                 variant="custom" 
-                                className="bg-red-500 text-white w-full shadow-none"
-                                disabled={isPaymentSuccessful}
+                                className={`w-full shadow-none ${isFullyPaid ? 'bg-gray-300 text-gray-600' : 'bg-red-500 text-white'}`}
+                                disabled={isFullyPaid}
                             >
                                 <Trash2 className="w-4 h-4 mr-1"/>
-                                {isPaymentSuccessful ? 'Payment Sent!' : 'Remove from List'}
+                                {isFullyPaid ? 'Fully Paid' : 'Remove from List'}
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
@@ -745,7 +802,7 @@ const SpenderListCard = ({ item, claimId, onRemove }) => {
                                 <AlertDialogAction 
                                     onClick={() => {
                                         console.log('Removing claim with ID:', claimId);
-                                        onRemove(claimId);
+                                        onDelete(claimId);
                                         setShowDeleteDialog(false);
                                     }}
                                     className="bg-red-500 hover:bg-red-600"
