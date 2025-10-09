@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, ArrowRight, Mail, Phone, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getUserFriendlyError } from '@/lib/utils';
 
 const AuthPage = () => {
   const [authMethod, setAuthMethod] = useState('email');
@@ -83,10 +84,11 @@ const AuthPage = () => {
     const { data, error } = await signUpWithEmailPassword(signUpPayload);
 
     if (error) {
-       toast({ variant: 'destructive', title: 'Sign up failed', description: error.message });
+       const friendlyMessage = getUserFriendlyError(error, 'creating your account');
+       toast({ variant: 'destructive', title: 'Sign up failed', description: friendlyMessage });
     } else if (data.user) {
       if (data.user.identities && data.user.identities.length === 0) {
-        toast({ variant: 'destructive', title: 'Email already registered', description: 'This email is already in use. Please login.' });
+        toast({ variant: 'destructive', title: 'Email already registered', description: 'This email is already in use. Please log in instead.' });
       } else {
         navigate('/verify');
       }

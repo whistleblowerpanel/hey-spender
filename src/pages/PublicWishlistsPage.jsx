@@ -16,8 +16,9 @@ const PublicWishlistsPage = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('wishlists')
-        .select('*, user:users!inner(username, full_name)')
+        .select('*, user:users!inner(username, full_name, is_active)')
         .eq('visibility', 'public')
+        .eq('user.is_active', true)
         .order('created_at', { ascending: false });
 
       if (data) {
@@ -44,7 +45,7 @@ const PublicWishlistsPage = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-12 md:px-0">
+      <main className="max-w-7xl mx-auto py-12">
         {loading ? (
           <div className="flex justify-center items-center min-h-[40vh]">
             <Loader2 className="h-16 w-16 animate-spin text-brand-purple-dark" />

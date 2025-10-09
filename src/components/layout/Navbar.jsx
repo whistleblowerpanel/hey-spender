@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ArrowRight, User, LogOut, LayoutGrid, Gift, Sparkles, Loader2 } from 'lucide-react';
+import { Menu, X, ArrowRight, User, LogOut, LayoutGrid, Gift, Sparkles, Loader2, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { getUserFriendlyError } from '@/lib/utils';
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -47,8 +48,8 @@ const Navbar = () => {
       // This should rarely happen now with the improved error handling
       toast({
         variant: 'destructive',
-        title: 'Sign out failed',
-        description: 'An unexpected error occurred'
+        title: 'Unable to sign out',
+        description: getUserFriendlyError(error, 'signing out')
       });
       console.error('Sign out error:', error);
     } finally {
@@ -56,10 +57,10 @@ const Navbar = () => {
     }
   };
   return <>
-      <header className="fixed top-4 left-0 right-0 z-50 px-4">
-        <nav className={`max-w-7xl mx-auto text-white border-2 border-black flex justify-between items-center h-[4.5rem] px-4 transition-all duration-300 ${
+      <header className="fixed top-4 left-0 right-0 z-[99999] px-4">
+        <nav className={`max-w-7xl mx-auto text-white border-2 border-black flex justify-between items-center h-[4.5rem] px-4 transition-all duration-300 backdrop-blur-sm ${
           isScrolled 
-            ? 'bg-brand-purple-dark/80 backdrop-blur-sm' 
+            ? 'bg-brand-purple-dark/90' 
             : 'bg-brand-purple-dark/95'
         }`}>
           <Link to="/" className="flex items-center space-x-2 group">
@@ -79,7 +80,7 @@ const Navbar = () => {
                        <User className="w-6 h-6 text-black" strokeWidth={2.5} />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuContent className="w-56 z-[100000]" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name}</p>
@@ -92,6 +93,10 @@ const Navbar = () => {
                      <DropdownMenuItem onClick={() => navigate(user.user_metadata?.role === 'admin' ? '/admin/dashboard' : '/dashboard')}>
                       <LayoutGrid className="mr-2 h-4 w-4" />
                       <span>Dashboard</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/dashboard/wallet')}>
+                      <Wallet className="mr-2 h-4 w-4" />
+                      <span>Wallet</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate(`/${user.user_metadata.username}`)}>
                       <User className="mr-2 h-4 w-4" />
@@ -143,7 +148,7 @@ const Navbar = () => {
       }} className={`fixed top-24 left-4 right-4 z-40 md:hidden text-white border-2 border-black p-4 transition-all duration-300 ${
         isScrolled 
           ? 'bg-brand-purple-dark/80 backdrop-blur-sm' 
-          : 'bg-brand-purple-dark/95'
+          : 'bg-brand-purple-dark/90 backdrop-blur-sm'
       }`}>
              <div className="flex flex-col space-y-2 mb-4">
                 <Button onClick={() => { navigate('/explore'); setMobileMenuOpen(false); }} variant="custom" className="bg-[#E94B29] text-white w-full justify-start">
@@ -156,6 +161,10 @@ const Navbar = () => {
             navigate(user.user_metadata?.role === 'admin' ? '/admin/dashboard' : '/dashboard');
             setMobileMenuOpen(false);
           }} variant="custom" className="bg-brand-green text-black w-full">Dashboard</Button>
+                   <Button onClick={() => {
+            navigate('/dashboard/wallet');
+            setMobileMenuOpen(false);
+          }} variant="custom" className="bg-brand-green text-black w-full">Wallet</Button>
                    <Button onClick={() => {
             navigate(`/${user.user_metadata.username}`);
             setMobileMenuOpen(false);

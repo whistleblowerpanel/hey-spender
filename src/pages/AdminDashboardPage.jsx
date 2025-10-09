@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { sendWithdrawalNotifications } from '@/lib/notificationService';
 import { paystackTransferService } from '@/lib/paystackTransferService';
-import { Loader2, Users, Gift, Settings, Trash2, ExternalLink, Banknote, CheckCircle, XCircle, DollarSign, Eye, EyeOff, Flag, Save, CreditCard, ArrowUpDown, Wallet as WalletIcon, ChevronsRight, Calendar as CalendarIcon, ArrowDown, ArrowUp, Clock } from 'lucide-react';
+import { deleteMultipleImages } from '@/lib/localMediaService';
+import { Loader2, Users, Gift, Settings, Trash2, ExternalLink, Banknote, CheckCircle, XCircle, DollarSign, Eye, EyeOff, Flag, Save, CreditCard, ArrowUpDown, Wallet as WalletIcon, ChevronsRight, Calendar as CalendarIcon, ArrowDown, ArrowUp, Clock, Code2, Bell } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
+import BottomNavbar from '@/components/dashboard/BottomNavbar';
+import AdminNotifications from '@/components/admin/AdminNotifications';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const StatCard = ({ title, value, icon, loading, bgColor = 'bg-brand-cream', textColor = 'text-black' }) => (
     <div className={`border-2 border-black p-4 ${bgColor} relative after:absolute after:left-[-8px] after:bottom-[-8px] after:w-full after:h-full after:bg-black after:z-[-1]`}>
@@ -54,6 +57,11 @@ const AdminSettings = ({ user }) => {
         siteName: 'HeySpender',
         supportEmail: 'support@heyspender.com',
         maintenanceMode: false
+    });
+    
+    // Developer mode state
+    const [developerMode, setDeveloperMode] = useState(() => {
+        return localStorage.getItem('devMode') === 'true';
     });
     
     // Loading states
@@ -321,6 +329,18 @@ const AdminSettings = ({ user }) => {
             setGlobalLoading(false);
         }, 1000);
     };
+    
+    const handleDeveloperModeToggle = (checked) => {
+        setDeveloperMode(checked);
+        localStorage.setItem('devMode', checked.toString());
+        toast({ 
+            title: checked ? '🔧 Developer Mode Enabled' : '✨ Developer Mode Disabled',
+            description: checked 
+                ? 'You will now see technical error messages with database codes for debugging.' 
+                : 'User-friendly error messages have been restored.',
+            duration: 3000
+        });
+    };
 
     if (!profileLoaded) {
         return (
@@ -331,10 +351,10 @@ const AdminSettings = ({ user }) => {
     }
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
             {/* Profile Settings */}
-            <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg flex flex-col h-full">
-                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Admin Profile</h2>
+            <div className="border-2 border-black p-4 sm:p-6 bg-white flex flex-col h-full">
+                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-2">Admin Profile</h2>
                 <form onSubmit={handleProfileUpdate} className="flex flex-col h-full space-y-4">
                     <div className="flex-1 space-y-4">
                         <div className="space-y-2">
@@ -415,8 +435,8 @@ const AdminSettings = ({ user }) => {
             </div>
 
             {/* Email Settings */}
-            <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg flex flex-col h-full">
-                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Email Settings</h2>
+            <div className="border-2 border-black p-4 sm:p-6 bg-white flex flex-col h-full">
+                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-2">Email Settings</h2>
                 <form onSubmit={handleEmailUpdate} className="flex flex-col h-full space-y-4">
                     <div className="flex-1 space-y-4">
                         <div className="space-y-2">
@@ -462,8 +482,8 @@ const AdminSettings = ({ user }) => {
             </div>
 
             {/* Password Settings */}
-            <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg flex flex-col h-full">
-                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Password Settings</h2>
+            <div className="border-2 border-black p-4 sm:p-6 bg-white flex flex-col h-full">
+                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-2">Password Settings</h2>
                 <form onSubmit={handlePasswordUpdate} className="flex flex-col h-full space-y-4">
                     <div className="flex-1 space-y-4">
                         <div className="space-y-2">
@@ -516,7 +536,7 @@ const AdminSettings = ({ user }) => {
                                 </button>
                             </div>
                         </div>
-                        <div className="text-xs sm:text-sm text-gray-500 space-y-1 bg-gray-50 p-3 rounded-md">
+                        <div className="text-xs sm:text-sm text-gray-500 space-y-1 bg-gray-50 p-3 ">
                             <p>• Password must be at least 6 characters long</p>
                             <p>• Use a combination of letters, numbers, and symbols for better security</p>
                         </div>
@@ -536,8 +556,8 @@ const AdminSettings = ({ user }) => {
             </div>
 
             {/* Global Settings */}
-            <div className="border-2 border-black p-4 sm:p-6 bg-white rounded-lg flex flex-col h-full">
-                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-4">Global Settings</h2>
+            <div className="border-2 border-black p-4 sm:p-6 bg-white flex flex-col h-full">
+                <h2 className="text-xl sm:text-2xl font-bold text-brand-purple-dark mb-2">Global Settings</h2>
                 <form onSubmit={handleGlobalSettingsUpdate} className="flex flex-col h-full space-y-4">
                     <div className="flex-1 space-y-4">
                 <div className="space-y-2">
@@ -576,13 +596,68 @@ const AdminSettings = ({ user }) => {
                 </form>
             </div>
 
+            {/* Developer Mode Settings */}
+            <div className="border-2 border-black p-4 sm:p-6 bg-gradient-to-br from-orange-50 to-orange-100  flex flex-col h-full lg:col-span-2">
+                <div className="flex items-center gap-2 mb-2">
+                    <Code2 className="w-6 h-6 text-orange-700" />
+                    <h2 className="text-xl sm:text-2xl font-bold text-orange-900">Developer Mode</h2>
+                    <span className="text-xs bg-orange-200 text-orange-900 px-2 py-1  font-semibold ml-auto">ADMIN ONLY</span>
+                </div>
+                <div className="space-y-4">
+                    <div className="bg-white/80 border-2 border-orange-300 p-4 ">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-orange-900 mb-2 flex items-center gap-2">
+                                    {developerMode ? '🔧 Developer Mode Active' : '✨ User-Friendly Mode Active'}
+                                </h3>
+                                <p className="text-sm text-orange-800 mb-3">
+                                    {developerMode 
+                                        ? 'Technical database errors with codes are shown for debugging. Turn off when not debugging.'
+                                        : 'All errors are shown in user-friendly language. Turn on to see technical database messages for debugging.'}
+                                </p>
+                                <div className="flex items-center gap-1">
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={developerMode}
+                                            onChange={(e) => handleDeveloperModeToggle(e.target.checked)}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300  peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[4px] after:bg-white after:border-gray-300 after:border after: after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-600 border-2 border-black"></div>
+                                    </label>
+                                    <span className="text-sm font-medium text-orange-900">
+                                        {developerMode ? 'ON - Show Technical Errors' : 'OFF - Show Friendly Errors'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white/60 border-2 border-orange-200 p-4 ">
+                        <h4 className="font-semibold text-orange-900 mb-2 text-sm">Example Error Messages:</h4>
+                        <div className="space-y-2 text-xs">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                                <div className="bg-white p-3  border border-green-200">
+                                    <p className="font-semibold text-green-800 mb-1">User-Friendly (OFF):</p>
+                                    <p className="text-gray-700">"A wishlist with this name already exists. Please choose a different title."</p>
+                                </div>
+                                <div className="bg-white p-3  border border-red-200">
+                                    <p className="font-semibold text-red-800 mb-1">Technical (ON):</p>
+                                    <p className="text-gray-700 font-mono text-[10px]">"[DEV MODE] duplicate key value violates unique constraint (Code: 23505)"</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Account Information */}
-            <div className="border-2 border-black p-4 sm:p-6 bg-brand-purple-dark rounded-lg lg:col-span-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">Admin Account Information</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="border-2 border-black p-4 sm:p-6 bg-brand-purple-dark  lg:col-span-2">
+                <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">Admin Account Information</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                     <div className="flex flex-col gap-2">
                         <span className="text-white/80 text-sm font-medium">Account ID:</span>
-                        <span className="font-mono text-xs bg-white/20 text-white px-2 py-1 rounded break-all">{user?.id}</span>
+                        <span className="font-mono text-xs bg-white/20 text-white px-2 py-1  break-all">{user?.id}</span>
                     </div>
                     <div className="flex flex-col gap-2">
                         <span className="text-white/80 text-sm font-medium">Admin since:</span>
@@ -607,14 +682,25 @@ const AdminDashboardPage = () => {
   const [filterType, setFilterType] = useState('all');
   const [visibleTransactions, setVisibleTransactions] = useState(17);
   const [loadingData, setLoadingData] = useState(true);
-  const [activeTab, setActiveTab] = useState('users');
   const [transactionSearchTerm, setTransactionSearchTerm] = useState('');
+  
+  // Determine active tab from URL
+  const location = useLocation();
+  const activeTab = useMemo(() => {
+    const path = location.pathname.split('/').pop();
+    return ['users', 'wishlists', 'payouts', 'transactions', 'notifications', 'settings'].includes(path) ? path : 'users';
+  }, [location.pathname]);
 
   // Payout management state
   const [payoutFilter, setPayoutFilter] = useState('all');
   const [payoutSearchTerm, setPayoutSearchTerm] = useState('');
   const [selectedPayouts, setSelectedPayouts] = useState([]);
   const [selectedPayoutForDetails, setSelectedPayoutForDetails] = useState(null);
+  
+  // New bulk actions and filtering state
+  const [bulkAction, setBulkAction] = useState('');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
 
   // Reset visible transactions when filter changes
   useEffect(() => {
@@ -628,14 +714,51 @@ const AdminDashboardPage = () => {
   const fetchData = useCallback(async () => {
     setLoadingData(true);
     try {
-        const usersPromise = supabase.from('users').select('*', { count: 'exact' }).order('created_at', { ascending: false });
+        const usersPromise = supabase
+          .from('users')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: false });
+        
+        // Get goals count for each user through wishlists
+        const goalsCountPromise = supabase
+          .from('goals')
+          .select('wishlist_id, wishlists!inner(user_id)')
+          .then(result => {
+            if (result.error) return { data: [], error: result.error };
+            // Group by user_id and count goals
+            const userGoalsCount = {};
+            result.data?.forEach(goal => {
+              const userId = goal.wishlists?.user_id;
+              if (userId) {
+                userGoalsCount[userId] = (userGoalsCount[userId] || 0) + 1;
+              }
+            });
+            return { data: userGoalsCount, error: null };
+          });
+
+        // Get wishlist items count for each user through wishlists
+        const wishlistItemsCountPromise = supabase
+          .from('wishlist_items')
+          .select('wishlist_id, wishlists!inner(user_id)')
+          .then(result => {
+            if (result.error) return { data: [], error: result.error };
+            // Group by user_id and count wishlist items
+            const userItemsCount = {};
+            result.data?.forEach(item => {
+              const userId = item.wishlists?.user_id;
+              if (userId) {
+                userItemsCount[userId] = (userItemsCount[userId] || 0) + 1;
+              }
+            });
+            return { data: userItemsCount, error: null };
+          });
         const wishlistsPromise = supabase.from('wishlists').select('*, user:users(full_name, username)', { count: 'exact' }).order('created_at', { ascending: false });
         const payoutsPromise = supabase.from('payouts').select('*, wallet:wallets(user:users(full_name, email))').order('created_at', { ascending: false });
         const pendingPayoutsPromise = supabase.from('payouts').select('id', { count: 'exact' }).eq('status', 'requested');
         const contributionsPromise = supabase.from('contributions').select('*, goal:goals(wishlist:wishlists(title, user:users(username, full_name)))').order('created_at', { ascending: false });
         const walletTransactionsPromise = supabase.from('wallet_transactions').select('*, wallet:wallets(user:users(full_name, username, email))').order('created_at', { ascending: false });
 
-        const [usersRes, wishlistsRes, payoutsRes, pendingPayoutsRes, contributionsRes, walletTransactionsRes] = await Promise.all([usersPromise, wishlistsPromise, payoutsPromise, pendingPayoutsPromise, contributionsPromise, walletTransactionsPromise]);
+        const [usersRes, goalsCountRes, wishlistItemsCountRes, wishlistsRes, payoutsRes, pendingPayoutsRes, contributionsRes, walletTransactionsRes] = await Promise.all([usersPromise, goalsCountPromise, wishlistItemsCountPromise, wishlistsPromise, payoutsPromise, pendingPayoutsPromise, contributionsPromise, walletTransactionsPromise]);
 
         if (usersRes.error) throw usersRes.error;
         if (wishlistsRes.error) throw wishlistsRes.error;
@@ -650,8 +773,20 @@ const AdminDashboardPage = () => {
             pendingPayouts: pendingPayoutsRes.count
         });
 
+        // Process users data to include counts
+        const usersWithCounts = usersRes.data?.map(user => {
+          const wishlistItemsCount = wishlistItemsCountRes.data?.[user.id] || 0;
+          const goalsCount = goalsCountRes.data?.[user.id] || 0;
+          
+          return {
+            ...user,
+            wishlist_items_count: wishlistItemsCount,
+            goals_count: goalsCount
+          };
+        }) || [];
+
         setData({
-            users: usersRes.data,
+            users: usersWithCounts,
             wishlists: wishlistsRes.data,
             payouts: payoutsRes.data,
             contributions: contributionsRes.data,
@@ -1022,7 +1157,16 @@ const AdminDashboardPage = () => {
   }, {});
   
   const handleUserStatusUpdate = async (userId, isActive) => {
-    const { error } = await supabase.rpc('update_user_status', { p_user_id: userId, p_is_active: isActive, p_admin_id: user.id });
+    // Update user status and track who performed the action
+    const { error } = await supabase
+      .from('users')
+      .update({ 
+        is_active: isActive,
+        suspended_by: isActive ? null : 'admin', // Set to 'admin' when suspending, null when activating
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+      
     if (error) {
       toast({ variant: 'destructive', title: 'Failed to update user status', description: error.message });
     } else {
@@ -1032,12 +1176,167 @@ const AdminDashboardPage = () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    const { error } = await supabase.auth.admin.deleteUser(userId);
-    if (error) {
-       toast({ variant: 'destructive', title: 'Error deleting user', description: error.message });
-    } else {
-       toast({ title: 'User deleted successfully' });
+    try {
+      // Get user data first to identify files to delete
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('username, full_name')
+        .eq('id', userId)
+        .single();
+
+      if (userError) {
+        toast({ variant: 'destructive', title: 'Error fetching user data', description: userError.message });
+        return;
+      }
+
+      // Get all wishlists for this user to find images
+      const { data: wishlists, error: wishlistsError } = await supabase
+        .from('wishlists')
+        .select('id, cover_image_url')
+        .eq('user_id', userId);
+
+      if (wishlistsError) {
+        toast({ variant: 'destructive', title: 'Error fetching wishlists', description: wishlistsError.message });
+        return;
+      }
+
+      // Get all wishlist items for this user to find images (through wishlists)
+      const { data: wishlistItems, error: itemsError } = await supabase
+        .from('wishlist_items')
+        .select('id, image_url, wishlist_id')
+        .in('wishlist_id', wishlists?.map(w => w.id) || []);
+
+      if (itemsError) {
+        toast({ variant: 'destructive', title: 'Error fetching wishlist items', description: itemsError.message });
+        return;
+      }
+
+      // Collect all image URLs to delete
+      const imageUrls = [];
+      
+      // Add wishlist cover images
+      wishlists?.forEach(wishlist => {
+        if (wishlist.cover_image_url) {
+          imageUrls.push(wishlist.cover_image_url);
+        }
+      });
+
+      // Add wishlist item images
+      wishlistItems?.forEach(item => {
+        if (item.image_url) {
+          imageUrls.push(item.image_url);
+        }
+      });
+
+      // Delete images from storage (local files)
+      if (imageUrls.length > 0) {
+        const deletionResult = await deleteMultipleImages(imageUrls);
+        console.log(`Image deletion completed: ${deletionResult.success} successful, ${deletionResult.failed} failed`);
+        
+        if (deletionResult.failed > 0) {
+          console.warn(`Failed to delete ${deletionResult.failed} images, but continuing with user deletion`);
+        }
+      }
+
+      // Delete all user-related data in the correct order (respecting foreign key constraints)
+      
+      // 1. Delete contributions (references cash_goals)
+      const { error: contributionsError } = await supabase
+        .from('contributions')
+        .delete()
+        .eq('supporter_user_id', userId);
+
+      if (contributionsError) {
+        console.error('Error deleting contributions:', contributionsError);
+      }
+
+      // 2. Delete wallet transactions
+      const { error: walletTransactionsError } = await supabase
+        .from('wallet_transactions')
+        .delete()
+        .eq('user_id', userId);
+
+      if (walletTransactionsError) {
+        console.error('Error deleting wallet transactions:', walletTransactionsError);
+      }
+
+      // 3. Delete wallets
+      const { error: walletsError } = await supabase
+        .from('wallets')
+        .delete()
+        .eq('user_id', userId);
+
+      if (walletsError) {
+        console.error('Error deleting wallets:', walletsError);
+      }
+
+      // 4. Delete cash goals (references wishlists)
+      const { error: cashGoalsError } = await supabase
+        .from('cash_goals')
+        .delete()
+        .eq('user_id', userId);
+
+      if (cashGoalsError) {
+        console.error('Error deleting cash goals:', cashGoalsError);
+      }
+
+      // 5. Delete wishlist items (through wishlist_id)
+      const wishlistIds = wishlists?.map(w => w.id) || [];
+      if (wishlistIds.length > 0) {
+        const { error: wishlistItemsDeleteError } = await supabase
+          .from('wishlist_items')
+          .delete()
+          .in('wishlist_id', wishlistIds);
+
+        if (wishlistItemsDeleteError) {
+          console.error('Error deleting wishlist items:', wishlistItemsDeleteError);
+        }
+      }
+
+      // 6. Delete wishlists
+      const { error: wishlistsDeleteError } = await supabase
+        .from('wishlists')
+        .delete()
+        .eq('user_id', userId);
+
+      if (wishlistsDeleteError) {
+        console.error('Error deleting wishlists:', wishlistsDeleteError);
+      }
+
+      // 7. Delete user from users table
+      const { error: userDeleteError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      if (userDeleteError) {
+        toast({ variant: 'destructive', title: 'Error deleting user record', description: userDeleteError.message });
+        return;
+      }
+
+      // 8. Finally, delete from auth system
+      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+      
+      if (authError) {
+        toast({ variant: 'destructive', title: 'Error deleting user from auth', description: authError.message });
+        return;
+      }
+
+      toast({ 
+        title: 'User deleted successfully', 
+        description: `User ${userData?.full_name || userData?.username || 'Unknown'} and all related data have been permanently deleted.` 
+      });
+      
+      // Refresh the data to update the UI
        fetchData();
+
+    } catch (error) {
+      console.error('Unexpected error during user deletion:', error);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error deleting user', 
+        description: 'An unexpected error occurred. Please try again.' 
+      });
     }
   };
 
@@ -1165,9 +1464,33 @@ const AdminDashboardPage = () => {
 
   // Payout management functions
   const filteredPayouts = (data.payouts || []).filter(payout => {
-    // Filter by status
-    if (payoutFilter !== 'all' && payout.status !== payoutFilter) {
+    // Filter by status (using categoryFilter instead of payoutFilter)
+    if (categoryFilter !== 'all' && payout.status !== categoryFilter) {
       return false;
+    }
+    
+    // Filter by date
+    if (dateFilter !== 'all') {
+      const payoutDate = new Date(payout.created_at);
+      const now = new Date();
+      
+      switch (dateFilter) {
+        case 'today':
+          if (payoutDate.toDateString() !== now.toDateString()) return false;
+          break;
+        case 'week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          if (payoutDate < weekAgo) return false;
+          break;
+        case 'month':
+          const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+          if (payoutDate < monthAgo) return false;
+          break;
+        case 'year':
+          const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+          if (payoutDate < yearAgo) return false;
+          break;
+      }
     }
     
     // Filter by search term
@@ -1233,24 +1556,96 @@ const AdminDashboardPage = () => {
     }
   };
 
+  // Handle bulk actions from dropdown
+  const handleBulkAction = async () => {
+    if (selectedPayouts.length === 0 || !bulkAction) return;
+    
+    try {
+      let newStatus = '';
+      switch (bulkAction) {
+        case 'approve':
+          newStatus = 'processing';
+          break;
+        case 'reject':
+          newStatus = 'failed';
+          break;
+        case 'complete':
+          newStatus = 'paid';
+          break;
+        default:
+          return;
+      }
+      
+      const promises = selectedPayouts.map(payoutId => 
+        supabase.rpc('update_payout_status', { 
+          p_payout_id: payoutId, 
+          p_new_status: newStatus, 
+          p_admin_id: user.id 
+        })
+      );
+      
+      await Promise.all(promises);
+      
+      toast({ 
+        title: 'Bulk action successful', 
+        description: `${selectedPayouts.length} payouts ${bulkAction}d` 
+      });
+      
+      setSelectedPayouts([]);
+      setBulkAction('');
+      fetchData();
+    } catch (error) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'Bulk action failed', 
+        description: error.message 
+      });
+    }
+  };
+
   if (authLoading || !user || user.user_metadata?.role !== 'admin') {
     return <div className="flex justify-center items-center min-h-screen"><Loader2 className="h-16 w-16 animate-spin text-brand-purple-dark" /></div>;
   }
 
+  // Tabs configuration
+  const tabs = [
+    { value: 'users', label: 'Users', icon: Users },
+    { value: 'wishlists', label: 'Wishlists', icon: Gift },
+    { value: 'payouts', label: 'Payouts', icon: DollarSign },
+    { value: 'transactions', label: 'Transactions', icon: ArrowUpDown },
+    { value: 'notifications', label: 'Notifications', icon: Bell },
+    { value: 'settings', label: 'Settings', icon: Settings },
+  ];
+
+  // Get page title based on active tab
+  const getPageTitle = (tab) => {
+    const titleMap = {
+      'users': 'Users Management',
+      'wishlists': 'Wishlists Management', 
+      'payouts': 'Payouts Management',
+      'transactions': 'Transactions Management',
+      'notifications': 'Notifications Management',
+      'settings': 'Admin Settings'
+    };
+    return titleMap[tab] || 'Admin Dashboard';
+  };
+
+  const currentPageTitle = getPageTitle(activeTab);
+
   return (
     <>
-      <Helmet><title>Admin Dashboard - HeySpender</title></Helmet>
+      <Helmet><title>{currentPageTitle} - HeySpender</title></Helmet>
       <TooltipProvider>
-        <div className="max-w-7xl mx-auto py-8 mt-32">
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4 px-4 md:px-0">
-                <h1 className="text-4xl font-bold text-brand-purple-dark">Admin Dashboard</h1>
+        <div className="max-w-7xl mx-auto px-4 lg:px-0 pt-[33px] pb-28 sm:pb-36">
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-2">
+                <h1 className="text-4xl font-bold text-brand-purple-dark">{currentPageTitle}</h1>
                 <Button variant="custom" className="bg-brand-orange text-black w-full sm:w-auto" onClick={fetchData} disabled={loadingData}>
                     {loadingData ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
                     Refresh Data
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 px-4 md:px-0">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
                 <StatCard 
                     title={dynamicCardData.card1.title} 
                     value={dynamicCardData.card1.value} 
@@ -1277,41 +1672,58 @@ const AdminDashboardPage = () => {
                 />
             </div>
 
-            <Tabs defaultValue="users" className="w-full px-4 md:px-0" onValueChange={setActiveTab}>
-            <TabsList className="inline-flex h-12 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground gap-1 overflow-x-auto scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none] w-full sm:grid sm:grid-cols-4 md:grid-cols-5 sm:overflow-visible">
-                <TabsTrigger value="users" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><Users className="w-4 h-4 mr-2" />Users</TabsTrigger>
-                <TabsTrigger value="wishlists" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><Gift className="w-4 h-4 mr-2" />Wishlists</TabsTrigger>
-                <TabsTrigger value="payouts" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><DollarSign className="w-4 h-4 mr-2" />Payouts</TabsTrigger>
-                <TabsTrigger value="transactions" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><ArrowUpDown className="w-4 h-4 mr-2" />Transactions</TabsTrigger>
-                <TabsTrigger value="settings" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><Settings className="w-4 h-4 mr-2" />Settings</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="users" className="mt-6 overflow-x-auto">
+            <div className="w-full">
+            {activeTab === 'users' && (
+              <div className="mt-1 overflow-x-auto">
                 {loadingData ? <Loader2 className="mx-auto my-16 h-8 w-8 animate-spin" /> : (
                 <Table>
-                    <TableHeader><TableRow><TableHead>Full Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead>Joined</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Full Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead>Wishlist Items</TableHead><TableHead>Cash Goals</TableHead><TableHead>Joined</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
                     {data.users.map(u => (
                         <TableRow key={u.id}>
                         <TableCell>{u.full_name}</TableCell><TableCell>{u.email}</TableCell>
                         <TableCell>{u.role}</TableCell>
                         <TableCell><span className={`px-2 py-1 text-xs font-semibold ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{u.is_active ? 'Active' : 'Suspended'}</span></TableCell>
+                        <TableCell className="text-center font-medium">{u.wishlist_items_count || 0}</TableCell>
+                        <TableCell className="text-center font-medium">{u.goals_count || 0}</TableCell>
                         <TableCell>{new Date(u.created_at).toLocaleDateString()}</TableCell>
                         <TableCell className="flex gap-2 justify-end">
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Button variant="flat" size="icon" className={`text-black border-2 border-black hover:shadow-[-2px_2px_0px_#000] ${u.is_active ? 'bg-yellow-400' : 'bg-green-400'}`} onClick={() => handleUserStatusUpdate(u.id, !u.is_active)}><EyeOff className="w-4 h-4" /></Button>
+                                    <Button 
+                                        variant="flat" 
+                                        size="icon" 
+                                        className={`text-black border-2 border-black hover:shadow-[-2px_2px_0px_#000] ${
+                                            u.is_active 
+                                                ? 'bg-brand-green' 
+                                                : u.suspended_by === 'admin'
+                                                    ? 'bg-brand-accent-red' 
+                                                    : 'bg-brand-orange'
+                                        }`} 
+                                        onClick={() => handleUserStatusUpdate(u.id, !u.is_active)}
+                                    >
+                                        <EyeOff className="w-4 h-4" />
+                                    </Button>
                                 </TooltipTrigger>
                                 <TooltipContent><p>{u.is_active ? 'Suspend User' : 'Activate User'}</p></TooltipContent>
                             </Tooltip>
                             <AlertDialog>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <AlertDialogTrigger asChild><Button variant="flat" size="icon" className="bg-brand-orange text-black border-2 border-black hover:shadow-[-2px_2px_0px_#000]" disabled={u.id === user.id}><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+                                        <AlertDialogTrigger asChild>
+                                            <Button 
+                                                variant="flat" 
+                                                size="icon" 
+                                                className="bg-brand-accent-red text-white border-2 border-black hover:shadow-[-2px_2px_0px_#000]" 
+                                                disabled={u.id === user.id}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </AlertDialogTrigger>
                                     </TooltipTrigger>
                                     <TooltipContent><p>Delete User</p></TooltipContent>
                                 </Tooltip>
-                                <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete User?</AlertDialogTitle><AlertDialogDescription>This action is irreversible. Are you sure?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteUser(u.id)}>Delete User</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                                <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete User?</AlertDialogTitle><AlertDialogDescription>This action is irreversible. Are you sure?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000]">Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteUser(u.id)} className="bg-brand-accent-red hover:bg-brand-accent-red/90 text-white border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90">Delete User</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
                             </AlertDialog>
                         </TableCell>
                         </TableRow>
@@ -1319,9 +1731,11 @@ const AdminDashboardPage = () => {
                     </TableBody>
                 </Table>
                 )}
-            </TabsContent>
+              </div>
+            )}
             
-            <TabsContent value="wishlists" className="mt-6 overflow-x-auto">
+            {activeTab === 'wishlists' && (
+              <div className="mt-1 overflow-x-auto">
                 {loadingData ? <Loader2 className="mx-auto my-16 h-8 w-8 animate-spin" /> : (
                 <Table>
                     <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Owner</TableHead><TableHead>Status</TableHead><TableHead>Created</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
@@ -1356,80 +1770,93 @@ const AdminDashboardPage = () => {
                     </TableBody>
                 </Table>
                 )}
-            </TabsContent>
+              </div>
+            )}
 
-            <TabsContent value="payouts" className="mt-6">
+            {activeTab === 'payouts' && (
+              <div className="mt-1">
                 {loadingData ? (
                   <Loader2 className="mx-auto my-16 h-8 w-8 animate-spin" />
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-1">
                     {/* Payout History Section */}
                     <div className="py-4 sm:py-6 px-0">
-                      <div className="mb-4">
-                        <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
-                          <h3 className="text-2xl sm:text-3xl font-bold text-brand-purple-dark whitespace-nowrap">All Payouts</h3>
-                          <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mt-4 sm:mt-0">
+                      <div className="mb-2">
+                      </div>
+
+                      {/* New Bulk Actions and Filtering Design */}
+                      <div className="flex flex-wrap items-center gap-2 mb-2 p-4 bg-gray-50 border-2 border-gray-200 ">
+                        {/* Search Box */}
+                        <div className="flex items-center gap-2">
                             <Input 
                               placeholder="Search by user email or account..." 
-                              className="w-full sm:w-64"
+                            className="w-64 border-2 border-gray-300 bg-white"
                               value={payoutSearchTerm}
                               onChange={(e) => setPayoutSearchTerm(e.target.value)}
                             />
-                            <div className="flex gap-2 w-full sm:w-auto">
+                        </div>
+
+                        {/* Bulk Actions Dropdown */}
+                        <div className="flex items-center gap-2">
+                          <Select value={bulkAction} onValueChange={setBulkAction}>
+                            <SelectTrigger className="w-40 border-2 border-gray-300 bg-white">
+                              <SelectValue placeholder="Bulk actions" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="approve">Approve</SelectItem>
+                              <SelectItem value="reject">Reject</SelectItem>
+                              <SelectItem value="complete">Mark Complete</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          
                               <Button
-                                variant={payoutFilter === 'all' ? 'custom' : 'outline'}
-                                className={`${payoutFilter === 'all' ? 'bg-brand-purple-dark text-white' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
-                                onClick={() => setPayoutFilter('all')}
-                              >
-                                All
-                              </Button>
-                              <Button
-                                variant={payoutFilter === 'requested' ? 'custom' : 'outline'}
-                                className={`${payoutFilter === 'requested' ? 'bg-brand-orange text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
-                                onClick={() => setPayoutFilter('requested')}
-                              >
-                                Pending
-                              </Button>
-                              <Button
-                                variant={payoutFilter === 'processing' ? 'custom' : 'outline'}
-                                className={`${payoutFilter === 'processing' ? 'bg-brand-purple-light text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
-                                onClick={() => setPayoutFilter('processing')}
-                              >
-                                Processing
-                              </Button>
-                              <Button
-                                variant={payoutFilter === 'paid' ? 'custom' : 'outline'}
-                                className={`${payoutFilter === 'paid' ? 'bg-brand-green text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
-                                onClick={() => setPayoutFilter('paid')}
-                              >
-                                Completed
+                            variant="custom" 
+                            className="bg-blue-500 text-white border-2 border-blue-600 shadow-none hover:shadow-[-2px_2px_0px_#000]  px-4"
+                            onClick={handleBulkAction}
+                            disabled={selectedPayouts.length === 0 || !bulkAction}
+                          >
+                            Apply
                               </Button>
                             </div>
+
+                        {/* Date Filter Dropdown */}
+                        <div className="flex items-center gap-2">
+                          <Select value={dateFilter} onValueChange={setDateFilter}>
+                            <SelectTrigger className="w-32 border-2 border-gray-300 bg-white">
+                              <SelectValue placeholder="All dates" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All dates</SelectItem>
+                              <SelectItem value="today">Today</SelectItem>
+                              <SelectItem value="week">This week</SelectItem>
+                              <SelectItem value="month">This month</SelectItem>
+                              <SelectItem value="year">This year</SelectItem>
+                            </SelectContent>
+                          </Select>
                           </div>
-                        </div>
+
+                        {/* Category Filter Dropdown */}
+                        <div className="flex items-center gap-2">
+                          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                            <SelectTrigger className="w-36 border-2 border-gray-300 bg-white">
+                              <SelectValue placeholder="All Categories" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Categories</SelectItem>
+                              <SelectItem value="requested">Pending</SelectItem>
+                              <SelectItem value="processing">Processing</SelectItem>
+                              <SelectItem value="paid">Completed</SelectItem>
+                              <SelectItem value="failed">Failed</SelectItem>
+                            </SelectContent>
+                          </Select>
                       </div>
 
-                      {/* Batch Actions */}
-                      <div className="flex justify-end mb-4">
-                        <div className="flex gap-2 w-full sm:w-auto">
-                          <Button 
-                            variant="custom" 
-                            className="bg-brand-green text-black border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] flex-[2] sm:flex-none"
-                            onClick={handleBatchApprove}
-                            disabled={selectedPayouts.length === 0}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Approve Selected ({selectedPayouts.length})
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            className="border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] flex-1 sm:flex-none"
-                            onClick={() => setSelectedPayouts([])}
-                            disabled={selectedPayouts.length === 0}
-                          >
-                            Clear Selection
-                          </Button>
+                        {/* Selection Counter */}
+                        {selectedPayouts.length > 0 && (
+                          <div className="ml-auto text-sm text-gray-600">
+                            {selectedPayouts.length} selected
                         </div>
+                        )}
                       </div>
 
                       {/* Empty state */}
@@ -1450,7 +1877,7 @@ const AdminDashboardPage = () => {
                           <div className="md:hidden">
                             {filteredPayouts.map((payout) => (
                               <div key={payout.id} className="py-6 px-0 border-b border-gray-200 last:border-b-0">
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1">
                                   <div className="w-14 h-14 sm:w-16 sm:h-16 bg-brand-orange flex items-center justify-center">
                                     <CreditCard className="w-7 h-7 text-black" />
                                   </div>
@@ -1514,7 +1941,7 @@ const AdminDashboardPage = () => {
                                       </div>
                                     </TableCell>
                                     <TableCell className="whitespace-nowrap">
-                                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                      <span className={`px-2 py-1 text-xs font-semibold  ${
                                         payout.status === 'requested' ? 'bg-brand-orange text-black' :
                                         payout.status === 'processing' ? 'bg-brand-purple-light text-black' :
                                         payout.status === 'paid' ? 'bg-brand-green text-black' :
@@ -1558,7 +1985,7 @@ const AdminDashboardPage = () => {
                                             <Button 
                                               size="sm" 
                                               variant="custom" 
-                                              className="bg-brand-green text-black"
+                                              className="bg-brand-green text-black shadow-none hover:shadow-[-2px_2px_0px_#000]"
                                               onClick={() => handlePayoutStatusUpdate(payout.id, 'paid')}
                                             >
                                               Mark Paid
@@ -1566,7 +1993,7 @@ const AdminDashboardPage = () => {
                                             <Button 
                                               size="sm" 
                                               variant="custom" 
-                                              className="bg-brand-accent-red text-white"
+                                              className="bg-brand-accent-red text-white shadow-none hover:shadow-[-2px_2px_0px_#000]"
                                               onClick={() => handlePayoutStatusUpdate(payout.id, 'failed')}
                                             >
                                               Mark Failed
@@ -1585,19 +2012,21 @@ const AdminDashboardPage = () => {
                     </div>
                   </div>
                 )}
-            </TabsContent>
+              </div>
+            )}
 
-            <TabsContent value="transactions" className="mt-6">
+            {activeTab === 'transactions' && (
+              <div className="mt-1">
                 {loadingData ? (
                   <Loader2 className="mx-auto my-16 h-8 w-8 animate-spin" />
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-1">
                     {/* Transaction History Section */}
                     <div className="py-4 sm:py-6 px-0">
-                      <div className="mb-4">
-                        <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
+                      <div className="mb-2">
+                        <div className="flex flex-col sm:flex-row justify-between items-center mb-2">
                           <h3 className="text-2xl sm:text-3xl font-bold text-brand-purple-dark whitespace-nowrap">All Transactions</h3>
-                          <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mt-4 sm:mt-0">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto mt-4 sm:mt-0">
                             <Input 
                               placeholder="Search by user, amount, or description..." 
                               className="w-full sm:w-64"
@@ -1607,28 +2036,28 @@ const AdminDashboardPage = () => {
                             <div className="flex gap-2 w-full sm:w-auto">
                               <Button
                                 variant={filterType === 'all' ? 'custom' : 'outline'}
-                                className={`${filterType === 'all' ? 'bg-brand-purple-dark text-white' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+                                className={`${filterType === 'all' ? 'bg-brand-purple-dark text-white' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none `}
                                 onClick={() => setFilterType('all')}
                               >
                                 All
                               </Button>
                               <Button
                                 variant={filterType === 'contributions' ? 'custom' : 'outline'}
-                                className={`${filterType === 'contributions' ? 'bg-brand-green text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+                                className={`${filterType === 'contributions' ? 'bg-brand-green text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none `}
                                 onClick={() => setFilterType('contributions')}
                               >
                                 Contributions
                               </Button>
                               <Button
                                 variant={filterType === 'payments' ? 'custom' : 'outline'}
-                                className={`${filterType === 'payments' ? 'bg-brand-purple-dark text-white' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+                                className={`${filterType === 'payments' ? 'bg-brand-purple-dark text-white' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none `}
                                 onClick={() => setFilterType('payments')}
                               >
                                 Payments
                               </Button>
                               <Button
                                 variant={filterType === 'payouts' ? 'custom' : 'outline'}
-                                className={`${filterType === 'payouts' ? 'bg-brand-orange text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
+                                className={`${filterType === 'payouts' ? 'bg-brand-orange text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none `}
                                 onClick={() => setFilterType('payouts')}
                               >
                                 Payouts
@@ -1655,13 +2084,13 @@ const AdminDashboardPage = () => {
                           {/* Mobile list view - redesigned */}
                           <div className="md:hidden">
                             {Object.entries(regrouped).map(([date, transactions]) => (
-                              <div key={date} className="mb-6">
+                              <div key={date} className="mb-2">
                                 <div className="text-sm font-medium text-gray-600 mb-3">
                                   {new Date(date).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </div>
                                 {transactions.map((t) => (
                                   <div key={t.id} className="py-6 px-0 border-b border-gray-200 last:border-b-0">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1">
                                       {getIconBadge(t)}
                                       <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-start gap-2">
@@ -1735,7 +2164,7 @@ const AdminDashboardPage = () => {
 
                       {/* Load More Button */}
                       {allFilteredTransactions.length > visibleTransactions && (
-                        <div className="flex justify-center mt-6">
+                        <div className="flex justify-center mt-1">
                           <Button
                             variant="outline"
                             onClick={loadMore}
@@ -1748,14 +2177,24 @@ const AdminDashboardPage = () => {
                     </div>
                   </div>
                 )}
-            </TabsContent>
+              </div>
+            )}
             
+            {activeTab === 'notifications' && (
+              <div className="mt-1">
+                <AdminNotifications />
+              </div>
+            )}
             
-
-            <TabsContent value="settings" className="mt-6">
+            {activeTab === 'settings' && (
+              <div className="mt-1">
                 <AdminSettings user={user} />
-            </TabsContent>
-            </Tabs>
+              </div>
+            )}
+            </div>
+
+            {/* Bottom Navigation */}
+            {/* BottomNavbar is now in AdminDashboardLayout */}
         </div>
 
         {/* Payout Details Modal */}
@@ -1770,7 +2209,7 @@ const AdminDashboardPage = () => {
               </AlertDialogHeader>
               
               <div className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-sm font-semibold">User Information</Label>
                     <div className="mt-1 space-y-1">
@@ -1794,7 +2233,7 @@ const AdminDashboardPage = () => {
                       </div>
                       <div className="text-sm">
                         <strong>Status:</strong> 
-                        <span className={`ml-2 px-2 py-1 text-xs font-semibold rounded-full ${
+                        <span className={`ml-2 px-2 py-1 text-xs font-semibold  ${
                           selectedPayoutForDetails.status === 'requested' ? 'bg-brand-orange text-black' :
                           selectedPayoutForDetails.status === 'processing' ? 'bg-brand-purple-light text-black' :
                           selectedPayoutForDetails.status === 'paid' ? 'bg-brand-green text-black' :
@@ -1839,7 +2278,7 @@ const AdminDashboardPage = () => {
 
                 {/* Processing Time Estimate */}
                 {selectedPayoutForDetails.status === 'requested' && (
-                  <div className="bg-brand-orange/10 border border-brand-orange rounded-lg p-4">
+                  <div className="bg-brand-orange/10 border border-brand-orange  p-4">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5 text-brand-orange" />
                       <div>
@@ -1853,7 +2292,7 @@ const AdminDashboardPage = () => {
                 )}
 
                 {selectedPayoutForDetails.status === 'processing' && (
-                  <div className="bg-brand-purple-light/10 border border-brand-purple-light rounded-lg p-4">
+                  <div className="bg-brand-purple-light/10 border border-brand-purple-light  p-4">
                     <div className="flex items-center gap-2">
                       <Loader2 className="w-5 h-5 text-brand-purple-light animate-spin" />
                       <div>
@@ -1872,7 +2311,7 @@ const AdminDashboardPage = () => {
                 {selectedPayoutForDetails.status === 'requested' && (
                   <div className="flex gap-2">
                     <AlertDialogAction 
-                      className="bg-brand-green text-black hover:bg-brand-green/90"
+                      className="bg-brand-green text-black hover:bg-brand-green/90 border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90"
                       onClick={() => {
                         handlePayoutStatusUpdate(selectedPayoutForDetails.id, 'processing');
                         setSelectedPayoutForDetails(null);
@@ -1881,7 +2320,7 @@ const AdminDashboardPage = () => {
                       Approve
                     </AlertDialogAction>
                     <AlertDialogAction 
-                      className="bg-brand-accent-red text-white hover:bg-brand-accent-red/90"
+                      className="bg-brand-accent-red text-white hover:bg-brand-accent-red/90 border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90"
                       onClick={() => {
                         handlePayoutStatusUpdate(selectedPayoutForDetails.id, 'failed');
                         setSelectedPayoutForDetails(null);
@@ -1894,7 +2333,7 @@ const AdminDashboardPage = () => {
                 {selectedPayoutForDetails.status === 'processing' && (
                   <div className="flex gap-2">
                     <AlertDialogAction 
-                      className="bg-brand-green text-black hover:bg-brand-green/90"
+                      className="bg-brand-green text-black hover:bg-brand-green/90 border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90"
                       onClick={() => {
                         handlePayoutStatusUpdate(selectedPayoutForDetails.id, 'paid');
                         setSelectedPayoutForDetails(null);
@@ -1903,7 +2342,7 @@ const AdminDashboardPage = () => {
                       Mark as Paid
                     </AlertDialogAction>
                     <AlertDialogAction 
-                      className="bg-brand-accent-red text-white hover:bg-brand-accent-red/90"
+                      className="bg-brand-accent-red text-white hover:bg-brand-accent-red/90 border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90"
                       onClick={() => {
                         handlePayoutStatusUpdate(selectedPayoutForDetails.id, 'failed');
                         setSelectedPayoutForDetails(null);

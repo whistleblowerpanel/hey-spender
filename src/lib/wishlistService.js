@@ -197,10 +197,12 @@ export const goalsService = {
       .select(`
         *,
         wishlist:wishlists!inner(
+          id,
           user_id,
           title,
           occasion,
-          visibility
+          visibility,
+          slug
         )
       `)
       .eq('wishlist.user_id', userId)
@@ -213,6 +215,7 @@ export const goalsService = {
       wishlist_id: goal.wishlist.id,
       wishlist_title: goal.wishlist.title,
       wishlist_occasion: goal.wishlist.occasion,
+      wishlist_slug: goal.wishlist.slug,
       visibility: goal.wishlist.visibility
     }));
   },
@@ -268,10 +271,23 @@ export const itemsService = {
       .select(`
         *,
         wishlist:wishlists!inner(
+          id,
           user_id,
           title,
           occasion,
-          visibility
+          visibility,
+          slug
+        ),
+        claims:claims(
+          id,
+          status,
+          created_at,
+          supporter_user_id,
+          supporter_user:users!supporter_user_id(
+            id,
+            username,
+            email
+          )
         )
       `)
       .eq('wishlist.user_id', userId)
@@ -284,7 +300,9 @@ export const itemsService = {
       wishlist_id: item.wishlist.id,
       wishlist_title: item.wishlist.title,
       wishlist_occasion: item.wishlist.occasion,
-      visibility: item.wishlist.visibility
+      wishlist_slug: item.wishlist.slug,
+      visibility: item.wishlist.visibility,
+      claims: item.claims || []
     }));
   },
 
@@ -372,23 +390,65 @@ export const itemsService = {
   }
 };
 
-// Image upload service
+// Image upload service - LOCAL STORAGE
 export const imageService = {
   async uploadCoverImage(file, userId) {
-    const fileExt = file.name.split('.').pop();
+    // Check if we're in production
+    if (import.meta.env.PROD) {
+      // In production, return a placeholder or throw a user-friendly error
+      throw new Error('Image uploads are currently not available in production. Please use existing images from the media library or contact support for assistance.');
+    }
+
+    // Use original file extension
+    const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `${userId}-${Date.now()}.${fileExt}`;
-    const filePath = `wishlist-covers/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('HeySpender Media')
-      .upload(filePath, file);
+    // Upload to local storage via API endpoint
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('fileName', fileName);
 
-    if (uploadError) throw uploadError;
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('HeySpender Media')
-      .getPublicUrl(filePath);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Upload failed');
+    }
 
-    return publicUrl;
+    const data = await response.json();
+    return data.url;
+  },
+
+  async uploadItemImage(file, userId) {
+    // Check if we're in production
+    if (import.meta.env.PROD) {
+      // In production, return a placeholder or throw a user-friendly error
+      throw new Error('Image uploads are currently not available in production. Please use existing images from the media library or contact support for assistance.');
+    }
+
+    // Use original file extension
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `${userId}-${Date.now()}.${fileExt}`;
+
+    // Upload to local storage via API endpoint
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('fileName', fileName);
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Upload failed');
+    }
+
+    const data = await response.json();
+    return data.url;
   }
 };

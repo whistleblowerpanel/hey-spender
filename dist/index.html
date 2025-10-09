@@ -3,17 +3,58 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    
+    <!-- Preconnect to font APIs for faster loading -->
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+    <link rel="dns-prefetch" href="https://api.fontshare.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Load Brockmann font -->
+    <link href="https://api.fontshare.com/v2/css?f[]=brockmann@400,700&display=swap" rel="stylesheet" />
+    
+    <!-- Fallback font (Poppins) -->
     <link
       href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
-    <link href="https://api.fontshare.com/v2/css?f[]=brockmann@400,700&display=swap" rel="stylesheet">
-    <title>Vite + React</title>
-    <script type="module" crossorigin src="/assets/index-2585726d.js"></script>
-    <link rel="stylesheet" href="/assets/index-793aacd8.css">
+    
+    <!-- Inline critical font styles for immediate application on mobile -->
+    <style>
+      @import url('https://api.fontshare.com/v2/css?f[]=brockmann@400,700&display=swap');
+      /* Import Brockmann font directly in inline CSS for immediate availability */
+      /* Force Brockmann immediately before any other styles load */
+      html {
+        font-family: 'Brockmann', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      }
+      body {
+        font-family: 'Brockmann', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        margin: 0;
+        padding: 0;
+      }
+      *, *::before, *::after {
+        font-family: 'Brockmann', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      }
+      input, textarea, select, button {
+        font-family: 'Brockmann', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      }
+      /* Prevent iOS font size adjust */
+      html {
+        -webkit-text-size-adjust: 100%;
+        -moz-text-size-adjust: 100%;
+             text-size-adjust: 100%;
+      }
+      /* Force font smoothing */
+      * {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+    </style>
+    
+    <title>HeySpender - Create & Share Your Wishlist</title>
+    <script type="module" crossorigin src="/assets/index-c01a4418.js"></script>
+    <link rel="stylesheet" href="/assets/index-f7a2777f.css">
     <script type="module">
 window.onerror = (message, source, lineno, colno, errorObj) => {
 	const errorDetails = errorObj ? JSON.stringify({

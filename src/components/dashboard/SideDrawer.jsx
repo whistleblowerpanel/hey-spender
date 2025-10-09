@@ -50,7 +50,7 @@ const SideDrawer = ({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b-2 border-black">
-          <h2 className="text-xl font-semibold text-brand-purple-dark">{title}</h2>
+          <h2 className="text-[30px] font-semibold text-brand-purple-dark">{title}</h2>
           <Button
             onClick={onClose}
             variant="ghost"
@@ -73,8 +73,8 @@ const SideDrawer = ({
               {onCancel && (
                 <Button
                   onClick={onCancel}
-                  variant="outline"
-                  className="flex-1"
+                  variant="modal"
+                  className="flex-1 bg-white"
                 >
                   {cancelLabel}
                 </Button>
@@ -82,7 +82,7 @@ const SideDrawer = ({
               {onSave && (
                 <Button
                   onClick={onSave}
-                  variant="custom"
+                  variant="modal"
                   className="bg-brand-orange text-black flex-1"
                 >
                   {saveLabel}

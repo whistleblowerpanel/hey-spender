@@ -1,43 +1,43 @@
 import React, { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Sparkles, Plus, X } from 'lucide-react';
-import { format } from 'date-fns';
-
-// WizardData structure (converted from TypeScript interfaces)
-// {
-//   title: string,
-//   occasion: string,
-//   dateType: 'specific' | 'flexible',
-//   specificDate?: Date,
-//   story: string,
-//   coverImage?: string,
-//   visibility: 'public' | 'unlisted' | 'private',
-//   items: Array<{name, price, quantity, url, description, image, allowGroupGift}>,
-//   cashGoals: Array<{title, targetAmount, deadline}>
-// }
-//
-// GetStartedWizardProps: {isOpen, onClose, onComplete, userId}
+import { Label } from '@/components/ui/label';
+import AddItemFormModal from './AddItemsModal';
+import { ArrowLeft, ArrowRight, Sparkles, Plus, X as XIcon } from 'lucide-react';
+import { wishlistSchema } from '@/lib/formValidation';
+import FormField from '@/components/forms/FormField';
+import DateInput from '@/components/forms/DateInput';
+import ImageUploadField from '@/components/forms/ImageUploadField';
 
 const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [data, setData] = useState({
-    title: '',
-    occasion: '',
-    dateType: 'flexible',
-    story: '',
-    visibility: 'unlisted',
-    items: [],
-    cashGoals: []
+  const [addItemModalOpen, setAddItemModalOpen] = useState(false);
+  const [addGoalModalOpen, setAddGoalModalOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [cashGoals, setCashGoals] = useState([]);
+
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors }
+  } = useForm({
+    resolver: zodResolver(wishlistSchema),
+    defaultValues: {
+      title: '',
+      occasion: '',
+      story: '',
+      visibility: 'unlisted',
+      event_date: null,
+      cover_image_url: ''
+    }
   });
+
+  const coverImageUrl = useWatch({ control, name: 'cover_image_url' });
+  const dateType = watch('event_date') ? 'specific' : 'flexible';
 
   const steps = [
     { title: 'Welcome', description: "Let's set up your first wishlist" },
@@ -47,17 +47,13 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
     { title: 'Story', description: 'Tell your Spenders why this wishlist matters.' },
     { title: 'Cover', description: 'Choose a beautiful cover photo' },
     { title: 'Privacy', description: 'Who can see your wishlist?' },
-    { title: 'Items & Goals', description: 'Add your first items or cash goals' }
+    { title: 'Wishlist Items & Goals', description: 'Add your first wishlist items or cash goals' }
   ];
 
   const occasions = [
     'Birthday', 'Wedding', 'Baby', 'Graduation', 
     'Housewarming', 'Charity', 'Just Because', 'Other', 'No occasion'
   ];
-
-  const updateData = (updates) => {
-    setData(prev => ({ ...prev, ...updates }));
-  };
 
   const nextStep = () => {
     if (currentStep < steps.length - 1) {
@@ -71,54 +67,30 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
     }
   };
 
-  const handleComplete = () => {
-    onComplete(data);
+  const handleComplete = handleSubmit((data) => {
+    const wizardData = {
+      ...data,
+      items,
+      cashGoals
+    };
+    onComplete(wizardData);
     onClose();
+  });
+
+  const handleAddItem = (itemData) => {
+    setItems(prev => [...prev, itemData]);
   };
 
-  const addItem = () => {
-    updateData({
-      items: [...data.items, {
-        name: '',
-        price: 0,
-        quantity: 1,
-        url: '',
-        description: '',
-        allowGroupGift: false
-      }]
-    });
+  const handleAddGoal = (goalData) => {
+    setCashGoals(prev => [...prev, goalData]);
   };
 
-  const updateItem = (index, updates) => {
-    const newItems = [...data.items];
-    newItems[index] = { ...newItems[index], ...updates };
-    updateData({ items: newItems });
-  };
-
-  const removeItem = (index) => {
-    const newItems = data.items.filter((_, i) => i !== index);
-    updateData({ items: newItems });
-  };
-
-  const addCashGoal = () => {
-    updateData({
-      cashGoals: [...data.cashGoals, {
-        title: '',
-        targetAmount: 0,
-        deadline: undefined
-      }]
-    });
-  };
-
-  const updateCashGoal = (index, updates) => {
-    const newGoals = [...data.cashGoals];
-    newGoals[index] = { ...newGoals[index], ...updates };
-    updateData({ cashGoals: newGoals });
-  };
-
-  const removeCashGoal = (index) => {
-    const newGoals = data.cashGoals.filter((_, i) => i !== index);
-    updateData({ cashGoals: newGoals });
+  const handleAIPolish = async (text, onChange) => {
+    // TODO: Implement AI polish API call
+    console.log('AI Polish requested for:', text);
+    // For now, just capitalize first letter of sentences
+    const polished = text.replace(/\.\s+([a-z])/g, (match, letter) => `. ${letter.toUpperCase()}`);
+    onChange(polished);
   };
 
   const renderStepContent = () => {
@@ -126,14 +98,14 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
       case 0:
         return (
           <div className="text-center space-y-6">
-            <div className="w-16 h-16 mx-auto bg-brand-purple-light flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto bg-white flex items-center justify-center rounded-lg">
               <Sparkles className="w-8 h-8 text-brand-purple-dark" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-brand-purple-dark mb-2">
+              <h2 className="text-2xl font-bold text-white mb-2">
                 Welcome to HeySpender!
               </h2>
-              <p className="text-gray-600">
+              <p className="text-white/80">
                 We'll ask a few quick questions. You can edit anything later.
               </p>
             </div>
@@ -143,17 +115,19 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
       case 1:
         return (
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="title">Wishlist Title</Label>
-              <Input
-                id="title"
-                value={data.title}
-                onChange={(e) => updateData({ title: e.target.value })}
-                placeholder="e.g. My Birthday Wishlist, Wedding Registry"
-                className="mt-2"
-              />
-            </div>
-            <p className="text-sm text-gray-500">
+            <FormField
+              control={control}
+              name="title"
+              label="Wishlist Title"
+              required
+              behaviorOverrides={{
+                inputProps: {
+                  placeholder: 'e.g. My Birthday Wishlist, Wedding Registry',
+                  className: 'bg-white border-2 border-black text-black'
+                }
+              }}
+            />
+            <p className="text-xs sm:text-sm text-white/70">
               Choose a name that describes what this wishlist is for.
             </p>
           </div>
@@ -162,9 +136,9 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
       case 2:
         return (
           <div className="space-y-4">
-            <Label>What's the occasion?</Label>
-            <Select value={data.occasion} onValueChange={(value) => updateData({ occasion: value })}>
-              <SelectTrigger>
+            <Label className="text-white text-sm sm:text-base font-medium">What's the occasion?</Label>
+            <Select value={watch('occasion')} onValueChange={(value) => setValue('occasion', value)}>
+              <SelectTrigger className="bg-white border-2 border-black text-black focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20">
                 <SelectValue placeholder="Select an occasion" />
               </SelectTrigger>
               <SelectContent>
@@ -181,38 +155,28 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
       case 3:
         return (
           <div className="space-y-4">
-            <Label>When would you love to receive these gifts?</Label>
-            <RadioGroup 
-              value={data.dateType} 
-              onValueChange={(value) => updateData({ dateType: value })}
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="specific" id="specific" />
-                <Label htmlFor="specific">Specific date</Label>
+            <Label className="text-white text-sm sm:text-base font-medium">When would you love to receive these gifts?</Label>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3 p-3 bg-white/10 border border-white/20 rounded-lg cursor-pointer"
+                   onClick={() => setValue('event_date', null)}>
+                <div className={`w-4 h-4 border-2 border-black ${!watch('event_date') ? 'bg-brand-green' : 'bg-white'}`} />
+                <Label className="text-white cursor-pointer flex-1">No exact date</Label>
               </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="flexible" id="flexible" />
-                <Label htmlFor="flexible">No exact date</Label>
+              <div className="flex items-center space-x-3 p-3 bg-white/10 border border-white/20 rounded-lg cursor-pointer"
+                   onClick={() => {/* DateInput will handle this */}}>
+                <div className={`w-4 h-4 border-2 border-black ${watch('event_date') ? 'bg-brand-green' : 'bg-white'}`} />
+                <Label className="text-white cursor-pointer flex-1">Specific date</Label>
               </div>
-            </RadioGroup>
+            </div>
 
-            {data.dateType === 'specific' && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {data.specificDate ? format(data.specificDate, 'PPP') : 'Pick a date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={data.specificDate}
-                    onSelect={(date) => updateData({ specificDate: date })}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+            {dateType === 'specific' && (
+              <DateInput
+                value={watch('event_date')}
+                onChange={(date) => setValue('event_date', date)}
+                minDate={new Date()}
+                placeholder="Pick a date"
+                className="bg-white border-2 border-black"
+              />
             )}
           </div>
         );
@@ -220,223 +184,82 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
       case 4:
         return (
           <div className="space-y-4">
-            <Label htmlFor="story">Your Story</Label>
-            <Textarea
-              id="story"
-              value={data.story}
-              onChange={(e) => updateData({ story: e.target.value })}
-              placeholder="Tell your supporters why this wishlist matters to you..."
-              className="min-h-[120px]"
+            <FormField
+              control={control}
+              name="story"
+              label="Your Story"
+              description="Tell your supporters why this wishlist matters to you"
+              behaviorOverrides={{
+                inputProps: {
+                  placeholder: 'Tell your supporters why this wishlist matters to you...',
+                  className: 'bg-white border-2 border-black text-black'
+                }
+              }}
+              onAIPolish={handleAIPolish}
             />
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Polish with AI
-              </Button>
-              <span className="text-xs text-gray-500">Optional: Let AI help improve your story</span>
-            </div>
           </div>
         );
 
       case 5:
         return (
           <div className="space-y-4">
-            <Label>Cover Photo</Label>
-            <div className="border-2 border-dashed border-gray-300 p-8 text-center">
-              <div className="space-y-4">
-                <div className="w-16 h-16 mx-auto bg-gray-100 flex items-center justify-center">
-                  {data.coverImage ? (
-                    <img src={data.coverImage} alt="Cover" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-2xl">📷</span>
-                  )}
-                </div>
-                <div>
-                  <Button variant="outline" size="sm">
-                    Upload Photo
-                  </Button>
-                  <p className="text-sm text-gray-500 mt-2">Or choose from our gallery</p>
-                </div>
-              </div>
-            </div>
+            <ImageUploadField
+              label="Cover Photo"
+              value={coverImageUrl}
+              onChange={(url) => setValue('cover_image_url', url)}
+              description="Upload a beautiful cover photo for your wishlist"
+              className="bg-white/10 p-4 rounded-lg"
+            />
           </div>
         );
 
       case 6:
         return (
           <div className="space-y-4">
-            <Label>Who can see your wishlist?</Label>
-            <RadioGroup 
-              value={data.visibility} 
-              onValueChange={(value) => updateData({ visibility: value })}
-            >
-              <div className="space-y-3">
-                <div className="flex items-start space-x-3 p-3 border">
-                  <RadioGroupItem value="public" id="public" className="mt-1" />
-                  <div className="flex-1">
-                    <Label htmlFor="public" className="font-medium">Public (Show on Explore Page)</Label>
-                    <p className="text-sm text-gray-500">Anyone can find and view your wishlist</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3 p-3 border">
-                  <RadioGroupItem value="unlisted" id="unlisted" className="mt-1" />
-                  <div className="flex-1">
-                    <Label htmlFor="unlisted" className="font-medium">Unlisted (Link-only)</Label>
-                    <p className="text-sm text-gray-500">Only people with the link can view it</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3 p-3 border">
-                  <RadioGroupItem value="private" id="private" className="mt-1" />
-                  <div className="flex-1">
-                    <Label htmlFor="private" className="font-medium">Private (Me only)</Label>
-                    <p className="text-sm text-gray-500">Only you can see this wishlist</p>
-                  </div>
-                </div>
-              </div>
-            </RadioGroup>
+            <FormField
+              control={control}
+              name="visibility"
+              label="Who can see your wishlist?"
+            />
           </div>
         );
 
       case 7:
         return (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Add Items or Cash Goals</h3>
-              <Tabs defaultValue="items" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="items">Items ({data.items.length})</TabsTrigger>
-                  <TabsTrigger value="goals">Cash Goals ({data.cashGoals.length})</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="items" className="space-y-4">
-                  <div className="space-y-3">
-                    {data.items.map((item, index) => (
-                      <div key={index} className="border p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Item {index + 1}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeItem(index)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label>Name</Label>
-                            <Input
-                              value={item.name}
-                              onChange={(e) => updateItem(index, { name: e.target.value })}
-                              placeholder="Item name"
-                            />
-                          </div>
-                          <div>
-                            <Label>Price (₦)</Label>
-                            <Input
-                              type="number"
-                              value={item.price || ''}
-                              onChange={(e) => updateItem(index, { price: Number(e.target.value) })}
-                              placeholder="0"
-                            />
-                          </div>
-                          <div>
-                            <Label>Quantity</Label>
-                            <Input
-                              type="number"
-                              value={item.quantity || ''}
-                              onChange={(e) => updateItem(index, { quantity: Number(e.target.value) })}
-                              placeholder="1"
-                            />
-                          </div>
-                          <div>
-                            <Label>Product URL</Label>
-                            <Input
-                              value={item.url || ''}
-                              onChange={(e) => updateItem(index, { url: e.target.value })}
-                              placeholder="https://..."
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>Description</Label>
-                          <Textarea
-                            value={item.description || ''}
-                            onChange={(e) => updateItem(index, { description: e.target.value })}
-                            placeholder="Describe this item..."
-                            className="min-h-[60px]"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                    <Button onClick={addItem} variant="outline" className="w-full">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Item
-                    </Button>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="goals" className="space-y-4">
-                  <div className="space-y-3">
-                    {data.cashGoals.map((goal, index) => (
-                      <div key={index} className="border p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Cash Goal {index + 1}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeCashGoal(index)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label>Goal Title</Label>
-                            <Input
-                              value={goal.title}
-                              onChange={(e) => updateCashGoal(index, { title: e.target.value })}
-                              placeholder="e.g. Vacation Fund"
-                            />
-                          </div>
-                          <div>
-                            <Label>Target Amount (₦)</Label>
-                            <Input
-                              type="number"
-                              value={goal.targetAmount || ''}
-                              onChange={(e) => updateCashGoal(index, { targetAmount: Number(e.target.value) })}
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>Deadline (optional)</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" className="w-full justify-start text-left font-normal">
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {goal.deadline ? format(goal.deadline, 'PPP') : 'No deadline'}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={goal.deadline}
-                                onSelect={(date) => updateCashGoal(index, { deadline: date })}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-                    ))}
-                    <Button onClick={addCashGoal} variant="outline" className="w-full">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Cash Goal
-                    </Button>
-                  </div>
-                </TabsContent>
-              </Tabs>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold mb-4 text-white">Add Wishlist Items or Cash Goals</h3>
+              <p className="text-white/70 mb-6">
+                You can add wishlist items and cash goals to your wishlist. Don't worry, you can always add more later!
+              </p>
+            </div>
+            
+            {/* Show added items count */}
+            {(items.length > 0 || cashGoals.length > 0) && (
+              <div className="bg-white/10 border border-white/20 rounded-lg p-4 text-white text-sm">
+                <p>✓ {items.length} wishlist item{items.length !== 1 ? 's' : ''} added</p>
+                <p>✓ {cashGoals.length} cash goal{cashGoals.length !== 1 ? 's' : ''} added</p>
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              <Button 
+                type="button"
+                onClick={() => setAddItemModalOpen(true)}
+                className="bg-brand-green border-2 border-black text-black hover:bg-brand-green/90 w-full py-3"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Wishlist Item
+              </Button>
+              
+              <Button 
+                type="button"
+                onClick={() => setAddGoalModalOpen(true)}
+                className="bg-brand-green border-2 border-black text-black hover:bg-brand-green/90 w-full py-3"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Cash Goal
+              </Button>
             </div>
           </div>
         );
@@ -449,60 +272,101 @@ const GetStartedWizard = ({ isOpen, onClose, onComplete, userId }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="border-b-2 border-black p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-brand-purple-dark">
-              {steps[currentStep].title}
-            </h2>
-            <span className="text-sm text-gray-500">
-              Step {currentStep + 1} of {steps.length}
-            </span>
+    <>
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+        <div className="bg-brand-purple-dark w-full max-w-2xl h-[500px] sm:h-[600px] overflow-hidden border-2 border-black rounded-lg">
+          {/* Header */}
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex-1">
+                <h2 className="text-xl sm:text-2xl lg:text-[30px] font-semibold text-white">
+                  {steps[currentStep].title}
+                </h2>
+                <p className="text-xs sm:text-sm text-white/80 mt-0.5">
+                  {steps[currentStep].description}
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="text-white hover:text-gray-200 transition-colors ml-4 sm:ml-6 -mt-2 sm:-mt-4"
+                type="button"
+              >
+                <XIcon className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 stroke-[3]" />
+              </button>
+            </div>
           </div>
-          <Progress value={(currentStep + 1) / steps.length * 100} className="h-2" />
-          <p className="text-sm text-gray-600 mt-2">
-            {steps[currentStep].description}
-          </p>
-        </div>
 
-        {/* Content */}
-        <div className="p-6 max-h-[60vh] overflow-y-auto">
-          {renderStepContent()}
-        </div>
+          {/* Content */}
+          <div className="p-4 sm:p-6 h-[300px] sm:h-[350px] overflow-y-auto bg-brand-purple-dark flex items-start justify-center pt-8 sm:pt-16">
+            <div className="w-full">
+              {renderStepContent()}
+            </div>
+          </div>
 
-        {/* Footer */}
-        <div className="border-t-2 border-black p-6">
-          <div className="flex justify-between">
-            <Button
-              onClick={prevStep}
-              variant="outline"
-              disabled={currentStep === 0}
-            >
-              <ChevronLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
+          {/* Footer */}
+          <div className="px-4 sm:px-6 pt-6 sm:pt-4 pb-6 sm:pb-1 h-20">
+            <div className="flex items-center justify-center gap-4 sm:gap-8 px-2 sm:px-4">
+              <button
+                type="button"
+                onClick={prevStep}
+                disabled={currentStep === 0}
+                className="w-12 h-12 sm:w-16 sm:h-16 bg-brand-green border-2 border-black flex items-center justify-center shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ArrowLeft className="w-6 h-6 sm:w-8 sm:h-8 text-black" />
+              </button>
 
-            <div className="flex gap-3">
-              <Button onClick={onClose} variant="outline">
-                Cancel
-              </Button>
+              {/* Stage Dots */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                {steps.map((_, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setCurrentStep(index)}
+                    className={`w-3 h-3 sm:w-4 sm:h-4 border-2 border-black shadow-[-2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer transition-all ${
+                      index === currentStep
+                        ? 'bg-brand-orange'
+                        : 'bg-white hover:bg-gray-200'
+                    }`}
+                  />
+                ))}
+              </div>
+
               {currentStep === steps.length - 1 ? (
-                <Button onClick={handleComplete} variant="custom" className="bg-brand-orange text-black">
-                  Create Wishlist
-                </Button>
+                <button
+                  type="button"
+                  onClick={handleComplete}
+                  className="bg-brand-green border-2 border-black px-4 sm:px-6 py-2 sm:py-3 shadow-sm hover:bg-brand-green/90"
+                >
+                  <span className="text-black font-medium text-sm sm:text-base">Create</span>
+                </button>
               ) : (
-                <Button onClick={nextStep} variant="custom" className="bg-brand-orange text-black">
-                  Next
-                  <ChevronRight className="w-4 h-4 ml-2" />
-                </Button>
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  className="w-12 h-12 sm:w-16 sm:h-16 bg-brand-green border-2 border-black flex items-center justify-center shadow-sm"
+                >
+                  <ArrowRight className="w-6 h-6 sm:w-8 sm:h-8 text-black" />
+                </button>
               )}
             </div>
           </div>
         </div>
       </div>
-    </div>
+      
+      <AddItemFormModal
+        isOpen={addItemModalOpen}
+        onClose={() => setAddItemModalOpen(false)}
+        onSave={handleAddItem}
+        type="item"
+      />
+      
+      <AddItemFormModal
+        isOpen={addGoalModalOpen}
+        onClose={() => setAddGoalModalOpen(false)}
+        onSave={handleAddGoal}
+        type="goal"
+      />
+    </>
   );
 };
 

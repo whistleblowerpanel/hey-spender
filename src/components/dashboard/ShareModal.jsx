@@ -5,13 +5,16 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Copy, Share2, Download, QrCode } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 import QRCode from 'qrcode';
 
 const ShareModal = ({ isOpen, onClose, wishlist }) => {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  const wishlistUrl = wishlist ? `${window.location.origin}/${wishlist.slug}` : '';
+  const username = user?.user_metadata?.username;
+  const wishlistUrl = wishlist && username ? `${window.location.origin}/${username}/${wishlist.slug}` : '';
   const shareText = `Check out my wishlist: ${wishlist?.title}! ${wishlistUrl}`;
 
   // Generate QR code when modal opens
@@ -60,7 +63,7 @@ const ShareModal = ({ isOpen, onClose, wishlist }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" fullscreenOnMobile={false}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="w-5 h-5" />
@@ -88,9 +91,10 @@ const ShareModal = ({ isOpen, onClose, wishlist }) => {
                 className="flex-1"
               />
               <Button
-                variant="outline"
+                variant="modal"
                 size="sm"
                 onClick={() => copyToClipboard(wishlistUrl)}
+                className="bg-white"
               >
                 <Copy className="w-4 h-4" />
               </Button>
@@ -108,10 +112,10 @@ const ShareModal = ({ isOpen, onClose, wishlist }) => {
                   className="w-32 h-32 border"
                 />
                 <Button
-                  variant="outline"
+                  variant="modal"
                   size="sm"
                   onClick={downloadQRCode}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 bg-white"
                 >
                   <Download className="w-4 h-4" />
                   Download QR
@@ -125,15 +129,16 @@ const ShareModal = ({ isOpen, onClose, wishlist }) => {
             <Label>Share to Social</Label>
             <div className="flex gap-2">
               <Button
+                variant="modal"
                 onClick={shareToWhatsApp}
-                className="flex-1 bg-green-600 hover:bg-green-700"
+                className="flex-1 bg-brand-green text-black"
               >
                 WhatsApp
               </Button>
               <Button
-                variant="outline"
+                variant="modal"
                 onClick={() => copyToClipboard(shareText)}
-                className="flex-1"
+                className="flex-1 bg-white"
               >
                 Copy Text
               </Button>

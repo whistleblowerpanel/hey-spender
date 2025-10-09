@@ -2821,7 +2821,7 @@ const GoalManagementModal = ({ wishlist, onAction }) => {
                         <span>{calculateProgress(goal.amount_raised || 0, goal.target_amount)}%</span>
                       </div>
                       <div className="relative h-4 w-full overflow-hidden border-2 border-black bg-gray-200">
-                        <div className={`h-full transition-all ${getProgressColor(calculateProgress(goal.amount_raised || 0, goal.target_amount))}`} style={{width: `${calculateProgress(goal.amount_raised || 0, goal.target_amount)}%`}}></div>
+                        <div className={`h-full transition-all ${getProgressColor(calculateProgress(goal.amount_raised || 0, goal.target_amount))}`} style={{width: `${calculateProgress(goal.amount_raised || 0, goal.target_amount)}%`, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0, 0, 0, 0.1) 10px, rgba(0, 0, 0, 0.1) 20px)'}}></div>
                       </div>
                     </div>
                     {goal.deadline && (

@@ -2,9 +2,9 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, TrendingDown, Eye, Share2, Heart, DollarSign } from 'lucide-react';
 
-const AnalyticsCard = ({ title, value, change, icon: Icon, trend = 'up' }) => {
+const AnalyticsCard = ({ title, value, change, icon: Icon, trend = 'up', subtitle }) => {
   const trendColor = trend === 'up' ? 'text-green-600' : 'text-red-600';
-  const trendIcon = trend === 'up' ? TrendingUp : TrendingDown;
+  const TrendIcon = trend === 'up' ? TrendingUp : TrendingDown;
 
   return (
     <Card>
@@ -14,15 +14,17 @@ const AnalyticsCard = ({ title, value, change, icon: Icon, trend = 'up' }) => {
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
-        {change && (
+        {change ? (
           <p className="text-xs text-muted-foreground">
             <span className={`inline-flex items-center ${trendColor}`}>
-              <trendIcon className="w-3 h-3 mr-1" />
+              <TrendIcon className="w-3 h-3 mr-1" />
               {change}
             </span>
             {' '}from last month
           </p>
-        )}
+        ) : subtitle ? (
+          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+        ) : null}
       </CardContent>
     </Card>
   );

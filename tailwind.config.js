@@ -25,7 +25,8 @@ module.exports = {
 		},
 		extend: {
       fontFamily: {
-        sans: ['Brockmann', 'Poppins', 'sans-serif'],
+        sans: ['Brockmann', 'Poppins', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        brockmann: ['Brockmann', 'Poppins', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
 			colors: {
         'brand-purple': '#7c3bed',

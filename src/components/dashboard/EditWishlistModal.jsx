@@ -11,8 +11,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarIcon, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { imageService } from '@/lib/wishlistService';
+import { useToast } from '@/components/ui/use-toast';
+import { getUserFriendlyError } from '@/lib/utils';
 
 const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     title: '',
     occasion: '',
@@ -60,6 +63,7 @@ const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
       setFormData(prev => ({ ...prev, coverImage: publicUrl }));
     } catch (error) {
       console.error('Error uploading image:', error);
+      toast({ variant: 'destructive', title: 'Upload failed', description: getUserFriendlyError(error, 'uploading the image') });
     } finally {
       setUploading(false);
     }
@@ -80,12 +84,13 @@ const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
       onClose();
     } catch (error) {
       console.error('Error updating wishlist:', error);
+      toast({ variant: 'destructive', title: 'Unable to update wishlist', description: getUserFriendlyError(error, 'updating the wishlist') });
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl" fullscreenOnMobile={true}>
         <DialogHeader>
           <DialogTitle>Edit Wishlist</DialogTitle>
         </DialogHeader>
@@ -176,13 +181,15 @@ const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
           {/* Cover Photo */}
           <div>
             <Label>Cover Photo</Label>
-            <div className="border-2 border-dashed border-gray-300 p-6 text-center mt-2">
+            <div className="border-2 border-dashed border-gray-300 p-8 text-center mt-2 bg-gray-50/50">
               <div className="space-y-4">
-                <div className="w-24 h-24 mx-auto bg-gray-100 flex items-center justify-center overflow-hidden">
+                <div className="w-16 h-16 mx-auto bg-gray-200 flex items-center justify-center rounded-lg">
                   {formData.coverImage ? (
-                    <img src={formData.coverImage} alt="Cover" className="w-full h-full object-cover" />
+                    <img src={formData.coverImage} alt="Cover" className="w-full h-full object-cover rounded-lg" />
                   ) : (
-                    <span className="text-3xl">📷</span>
+                    <svg className="w-8 h-8 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                    </svg>
                   )}
                 </div>
                 <div>
@@ -194,29 +201,19 @@ const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
                     id="edit-cover-upload"
                     disabled={uploading}
                   />
-                  <label htmlFor="edit-cover-upload">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      asChild
-                      disabled={uploading}
-                    >
-                      <span>
-                        {uploading ? (
-                          <>
-                            <Upload className="w-4 h-4 mr-2 animate-spin" />
-                            Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4 mr-2" />
-                            Upload Photo
-                          </>
-                        )}
-                      </span>
-                    </Button>
+                  <label htmlFor="edit-cover-upload" className="cursor-pointer">
+                    <div className="text-gray-700 font-medium text-sm">
+                      {uploading ? (
+                        <div className="flex items-center justify-center">
+                          <Upload className="w-4 h-4 mr-2 animate-spin" />
+                          Uploading...
+                        </div>
+                      ) : (
+                        "Click to upload or drag and drop"
+                      )}
+                    </div>
                   </label>
-                  <p className="text-sm text-gray-500 mt-2">PNG, JPG, GIF up to 5MB</p>
+                  <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP (MAX. 5MB)</p>
                 </div>
               </div>
             </div>
@@ -245,21 +242,14 @@ const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
                     <p className="text-sm text-gray-500">Only people with the link can view it</p>
                   </div>
                 </div>
-                <div className="flex items-start space-x-3 p-3 border">
-                  <RadioGroupItem value="private" id="edit-private" className="mt-1" />
-                  <div className="flex-1">
-                    <Label htmlFor="edit-private" className="font-medium">Private (Me only)</Label>
-                    <p className="text-sm text-gray-500">Only you can see this wishlist</p>
-                  </div>
-                </div>
               </div>
             </RadioGroup>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} variant="custom" className="bg-brand-orange text-black">
+          <Button variant="modal" onClick={onClose} className="bg-white">Cancel</Button>
+          <Button onClick={handleSave} variant="modal" className="bg-brand-orange text-black">
             Save Changes
           </Button>
         </DialogFooter>

@@ -23,7 +23,7 @@ const AuthConfirmPage = () => {
                     .from('claims')
                     .select('*, wishlist_item:wishlist_items!inner(*)')
                     .eq('supporter_contact', session.user.email)
-                    .eq('status', 'pending_verification')
+                    .eq('status', 'pending')
                     .order('created_at', { ascending: false })
                     .limit(1)
                     .single();
@@ -54,11 +54,12 @@ const AuthConfirmPage = () => {
                         toast({ title: 'Item Claimed!', description: `You have successfully claimed "${claim.wishlist_item.name}".` });
                     }
                     
-                    // Redirect to dashboard with state to select 'claims' tab
+                    // Redirect to spender list page after claiming an item
                     const isAdmin = session.user.user_metadata?.role === 'admin';
-                    navigate(isAdmin ? '/admin/dashboard' : '/dashboard', { state: { defaultTab: 'claims' } });
+                    navigate(isAdmin ? '/admin/dashboard' : '/dashboard/spender-list');
 
                 } else {
+                    // New user without claim - show them wishlists page with Get Started button
                     toast({ title: 'Account Confirmed!', description: 'Your account is now active.' });
                     const isAdmin = session.user.user_metadata?.role === 'admin';
                     navigate(isAdmin ? '/admin/dashboard' : '/dashboard');

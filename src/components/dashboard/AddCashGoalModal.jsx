@@ -1,109 +1,123 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
+import { useToast } from '@/components/ui/use-toast';
+import { getUserFriendlyError } from '@/lib/utils';
+import { cashGoalSchema } from '@/lib/formValidation';
+import FormField from '@/components/forms/FormField';
+import DateInput from '@/components/forms/DateInput';
 
 const AddCashGoalModal = ({ isOpen, onClose, wishlists, onSave }) => {
-  const [formData, setFormData] = useState({
-    title: '',
-    targetAmount: '',
-    deadline: null,
-    deadlineType: 'flexible',
-    wishlistId: ''
+  const { toast } = useToast();
+  
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { isSubmitting }
+  } = useForm({
+    resolver: zodResolver(cashGoalSchema),
+    defaultValues: {
+      title: '',
+      target_amount: 0,
+      deadline: null,
+      wishlist_id: ''
+    }
   });
-  const [loading, setLoading] = useState(false);
+
+  const deadlineValue = useWatch({ control, name: 'deadline' });
+  const [deadlineType, setDeadlineType] = React.useState('flexible');
 
   useEffect(() => {
     if (isOpen) {
       // Reset form when modal opens
-      setFormData({
+      reset({
         title: '',
-        targetAmount: '',
+        target_amount: 0,
         deadline: null,
-        deadlineType: 'flexible',
-        wishlistId: ''
+        wishlist_id: ''
       });
+      setDeadlineType('flexible');
     }
-  }, [isOpen]);
+  }, [isOpen, reset]);
 
-  const handleSave = async () => {
-    if (!formData.title || !formData.targetAmount || !formData.wishlistId) {
-      return;
-    }
-
-    setLoading(true);
+  const onSubmit = async (data) => {
     try {
       const goalData = {
-        title: formData.title,
-        target_amount: parseFloat(formData.targetAmount),
-        deadline: formData.deadlineType === 'specific' ? formData.deadline?.toISOString() : null,
-        wishlist_id: formData.wishlistId
+        title: data.title.trim(),
+        target_amount: data.target_amount,
+        deadline: deadlineType === 'specific' && data.deadline ? data.deadline.toISOString() : null,
+        wishlist_id: data.wishlist_id
       };
-
+      
       await onSave(goalData);
       onClose();
     } catch (error) {
       console.error('Error creating cash goal:', error);
-    } finally {
-      setLoading(false);
+      toast({
+        variant: 'destructive',
+        title: 'Unable to create cash goal',
+        description: getUserFriendlyError(error, 'creating the cash goal')
+      });
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg" fullscreenOnMobile={false}>
         <DialogHeader>
           <DialogTitle>Add New Cash Goal</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
           {/* Title */}
-          <div>
-            <Label htmlFor="goal-title">Goal Title</Label>
-            <Input
-              id="goal-title"
-              value={formData.title}
-              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="e.g. To Carry Hoelosho For Idris"
-              className="mt-2"
-            />
-          </div>
+          <FormField
+            control={control}
+            name="title"
+            label="Goal Title"
+            required
+            behaviorOverrides={{
+              inputProps: {
+                placeholder: 'e.g., Save for new laptop',
+              }
+            }}
+          />
 
           {/* Target Amount */}
-          <div>
-            <Label htmlFor="target-amount">Target Amount (₦)</Label>
-            <Input
-              id="target-amount"
-              type="number"
-              value={formData.targetAmount}
-              onChange={(e) => setFormData(prev => ({ ...prev, targetAmount: e.target.value }))}
-              placeholder="100000"
-              className="mt-2"
-              min="1"
-              step="1"
-            />
-          </div>
+          <FormField
+            control={control}
+            name="target_amount"
+            label="Target Amount"
+            required
+            behaviorOverrides={{
+              inputProps: {
+                placeholder: '150,000',
+              }
+            }}
+          />
 
           {/* Wishlist Selection */}
-          <div>
-            <Label>Wishlist</Label>
+          <div className="space-y-2">
+            <Label htmlFor="wishlist-select" className="text-sm sm:text-base font-medium flex items-center gap-1">
+              Wishlist
+              <span className="text-red-600" aria-label="required">*</span>
+            </Label>
             <Select 
-              value={formData.wishlistId} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, wishlistId: value }))}
+              value={watch('wishlist_id')}
+              onValueChange={(value) => setValue('wishlist_id', value)}
             >
-              <SelectTrigger className="mt-2">
+              <SelectTrigger id="wishlist-select" className="mt-2 border-2 border-black">
                 <SelectValue placeholder="Select a wishlist" />
               </SelectTrigger>
               <SelectContent>
-                {wishlists.map(wishlist => (
+                {wishlists?.map(wishlist => (
                   <SelectItem key={wishlist.id} value={wishlist.id}>
                     {wishlist.title}
                   </SelectItem>
@@ -112,59 +126,68 @@ const AddCashGoalModal = ({ isOpen, onClose, wishlists, onSave }) => {
             </Select>
           </div>
 
-          {/* Deadline */}
-          <div>
-            <Label>Deadline</Label>
+          {/* Deadline Type */}
+          <div className="space-y-2">
+            <Label className="text-sm sm:text-base font-medium">Deadline</Label>
             <RadioGroup 
-              value={formData.deadlineType} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, deadlineType: value }))}
+              value={deadlineType}
+              onValueChange={(value) => {
+                setDeadlineType(value);
+                if (value === 'flexible') {
+                  setValue('deadline', null);
+                }
+              }}
               className="mt-2"
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="flexible" id="goal-flexible" />
-                <Label htmlFor="goal-flexible">No specific deadline</Label>
+                <RadioGroupItem 
+                  value="flexible" 
+                  id="goal-flexible"
+                  className="w-4 h-4 border-2 border-black rounded-none data-[state=checked]:bg-brand-green data-[state=checked]:border-brand-green [&>span]:hidden"
+                />
+                <Label htmlFor="goal-flexible" className="font-normal cursor-pointer">No specific deadline</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="specific" id="goal-specific" />
-                <Label htmlFor="goal-specific">Specific deadline</Label>
+                <RadioGroupItem 
+                  value="specific" 
+                  id="goal-specific"
+                  className="w-4 h-4 border-2 border-black rounded-none data-[state=checked]:bg-brand-green data-[state=checked]:border-brand-green [&>span]:hidden"
+                />
+                <Label htmlFor="goal-specific" className="font-normal cursor-pointer">Specific deadline</Label>
               </div>
             </RadioGroup>
 
-            {formData.deadlineType === 'specific' && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal mt-2">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.deadline ? format(formData.deadline, 'PPP') : 'Pick a deadline'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={formData.deadline}
-                    onSelect={(date) => setFormData(prev => ({ ...prev, deadline: date }))}
-                    initialFocus
-                    disabled={(date) => date < new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
+            {deadlineType === 'specific' && (
+              <DateInput
+                value={deadlineValue}
+                onChange={(date) => setValue('deadline', date)}
+                minDate={new Date()}
+                placeholder="Pick a deadline"
+                className="mt-2"
+              />
             )}
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleSave} 
-            variant="custom" 
-            className="bg-brand-orange text-black"
-            disabled={loading || !formData.title || !formData.targetAmount || !formData.wishlistId}
-          >
-            {loading ? 'Creating...' : 'Create Goal'}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button 
+              type="button"
+              variant="modal" 
+              onClick={onClose} 
+              disabled={isSubmitting} 
+              className="bg-white"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit"
+              variant="modal" 
+              className="bg-brand-orange text-black"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Creating...' : 'Create Goal'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

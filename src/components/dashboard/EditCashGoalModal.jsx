@@ -9,8 +9,11 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
+import { useToast } from '@/components/ui/use-toast';
+import { getUserFriendlyError } from '@/lib/utils';
 
 const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     title: '',
     targetAmount: '',
@@ -26,15 +29,14 @@ const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
       let wishlistId = '';
       
       if (goal.wishlist_id) {
-        wishlistId = goal.wishlist_id;
+        // If it's a direct ID, handle both string and object cases
+        wishlistId = typeof goal.wishlist_id === 'object' ? goal.wishlist_id.id : goal.wishlist_id;
       } else if (goal.wishlist?.id) {
-        wishlistId = goal.wishlist.id;
-      } else if (goal.wishlist && typeof goal.wishlist === 'object' && goal.wishlist.id) {
-        // If wishlist is an object, get its id
+        // If wishlist is nested
         wishlistId = goal.wishlist.id;
       }
       
-      // Ensure wishlistId is a string, not an object
+      // Ensure wishlistId is a string for Select component matching
       wishlistId = wishlistId ? String(wishlistId) : '';
       
       const newFormData = {
@@ -68,9 +70,10 @@ const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
 
     setLoading(true);
     try {
+      const cleanAmount = String(formData.targetAmount).replace(/,/g, '');
       const updates = {
         title: formData.title,
-        target_amount: parseFloat(formData.targetAmount),
+        target_amount: parseFloat(cleanAmount),
         deadline: formData.deadlineType === 'specific' ? formData.deadline?.toISOString() : null
       };
 
@@ -83,14 +86,22 @@ const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
       onClose();
     } catch (error) {
       console.error('Error updating cash goal:', error);
+      toast({ variant: 'destructive', title: 'Unable to update cash goal', description: getUserFriendlyError(error, 'updating the cash goal') });
     } finally {
       setLoading(false);
     }
   };
 
+  const formatNumber = (value) => {
+    const numericValue = String(value).replace(/[^\d.]/g, '');
+    const parts = numericValue.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg" fullscreenOnMobile={false}>
         <DialogHeader>
           <DialogTitle>Edit Cash Goal</DialogTitle>
         </DialogHeader>
@@ -113,19 +124,20 @@ const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
             <Label htmlFor="edit-target-amount">Target Amount (₦)</Label>
             <Input
               id="edit-target-amount"
-              type="number"
+              inputMode="numeric"
               value={formData.targetAmount}
-              onChange={(e) => setFormData(prev => ({ ...prev, targetAmount: e.target.value }))}
-              placeholder="100000"
+              onChange={(e) => setFormData(prev => ({ ...prev, targetAmount: formatNumber(e.target.value) }))}
+              placeholder="e.g., 150000"
               className="mt-2"
-              min="1"
-              step="1"
             />
           </div>
 
           {/* Wishlist Selection */}
           <div>
-            <Label>Wishlist</Label>
+            <Label>
+              Link to Wishlist
+              <span className="text-red-600 ml-1">*</span>
+            </Label>
             <Select 
               value={formData.wishlistId || ''} 
               onValueChange={(value) => {
@@ -138,7 +150,7 @@ const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
               <SelectContent>
                 {wishlists && wishlists.length > 0 ? (
                   wishlists.map(wishlist => (
-                    <SelectItem key={wishlist.id} value={wishlist.id}>
+                    <SelectItem key={wishlist.id} value={String(wishlist.id)}>
                       {wishlist.title}
                     </SelectItem>
                   ))
@@ -149,9 +161,6 @@ const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
                 )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500 mt-1">
-              Selected: {formData.wishlistId ? String(formData.wishlistId) : 'None'}
-            </p>
           </div>
 
           {/* Deadline */}
@@ -195,12 +204,12 @@ const EditCashGoalModal = ({ isOpen, onClose, goal, wishlists, onSave }) => {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>
+          <Button variant="modal" onClick={onClose} className="bg-white" disabled={loading}>
             Cancel
           </Button>
           <Button 
             onClick={handleSave} 
-            variant="custom" 
+            variant="modal" 
             className="bg-brand-orange text-black"
             disabled={loading || !formData.title?.trim() || !formData.targetAmount}
           >

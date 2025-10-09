@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 const MobileModal = ({ isOpen, onClose, title, children, onSave, saveLabel = "Save" }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md" fullscreenOnMobile={false}>
         <DialogHeader className="pb-4">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
@@ -28,15 +28,15 @@ const MobileModal = ({ isOpen, onClose, title, children, onSave, saveLabel = "Sa
         {onSave && (
           <div className="flex gap-3 pt-4 border-t">
             <Button
-              variant="outline"
+              variant="modal"
               onClick={onClose}
-              className="flex-1"
+              className="flex-1 bg-white"
             >
               Cancel
             </Button>
             <Button
               onClick={onSave}
-              variant="custom"
+              variant="modal"
               className="bg-brand-orange text-black flex-1"
             >
               {saveLabel}

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { getUserFriendlyError } from '@/lib/utils';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -42,7 +43,7 @@ const LoginPage = () => {
         .single();
       
       if (error || !user) {
-        toast({ variant: 'destructive', title: 'Login failed', description: 'Invalid username or password.' });
+        toast({ variant: 'destructive', title: 'Login failed', description: 'Incorrect username or password. Please try again.' });
         setLoading(false);
         return;
       }
@@ -52,7 +53,8 @@ const LoginPage = () => {
     const { data, error } = await signInWithEmailPassword({ email, password });
 
     if (error) {
-      toast({ variant: 'destructive', title: 'Login failed', description: error.message });
+      const friendlyMessage = getUserFriendlyError(error, 'logging in');
+      toast({ variant: 'destructive', title: 'Login failed', description: friendlyMessage });
     } else {
         toast({ title: 'Login successful!', description: "Welcome back." });
         
@@ -70,7 +72,7 @@ const LoginPage = () => {
                 .eq('supporter_user_id', data.user.id);
             
             if (data.user.identities?.length > 0 && (claimsCount || 0) > 0) {
-                navigate('/dashboard', { state: { defaultTab: 'claims' } });
+                navigate('/dashboard/spender-list');
             } else {
                 navigate('/dashboard');
             }

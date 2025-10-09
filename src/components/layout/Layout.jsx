@@ -8,7 +8,7 @@ const Layout = () => {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
   
-  const isProfilePage = /^\/[^/]+\/?$/.test(location.pathname) && !['/register', '/login', '/verify', '/admin', '/dashboard', '/explore', '/', '/auth/confirm'].includes(location.pathname);
+  const isProfilePage = /^\/[^/]+\/?$/.test(location.pathname) && !['/register', '/login', '/verify', '/admin', '/dashboard', '/wallet', '/explore', '/', '/auth/confirm'].includes(location.pathname);
   const isWishlistPage = /^\/[^/]+\/[^/]+$/.test(location.pathname);
   const isPublicWishlistsPage = location.pathname === '/explore';
 

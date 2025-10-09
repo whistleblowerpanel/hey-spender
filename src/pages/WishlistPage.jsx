@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Gift, Clock, Loader2, Image as ImageIcon, Copy, QrCode as QrCodeIcon, Share2, Info, Mail, Phone, Eye, EyeOff, CheckCircle, X, ExternalLink, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Gift, Clock, Loader2, Image as ImageIcon, Copy, QrCode as QrCodeIcon, Share2, Info, Mail, Phone, Eye, EyeOff, CheckCircle, X, ExternalLink, DollarSign, ChevronLeft, ChevronRight, PauseCircle } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -18,6 +18,7 @@ import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { z } from 'zod';
 import Confetti from '@/components/Confetti';
+import { getUserFriendlyError } from '@/lib/utils';
 
 // Helper function to get progress bar color based on percentage
 const getProgressColor = (percentage) => {
@@ -125,7 +126,7 @@ const ClaimItemModal = ({ item, onClaimed, trigger }) => {
 
             if (claimError) {
                 console.error('Claim error:', claimError);
-                toast({ variant: 'destructive', title: 'Failed to claim item', description: claimError.message });
+                toast({ variant: 'destructive', title: 'Unable to claim item', description: getUserFriendlyError(claimError, 'claiming the item') });
             } else {
                 console.log('Claim successful:', claimData);
                 
@@ -139,11 +140,11 @@ const ClaimItemModal = ({ item, onClaimed, trigger }) => {
                 onClaimed();
                 setOpen(false);
                 const isAdmin = user?.user_metadata?.role === 'admin';
-                navigate(isAdmin ? '/admin/dashboard' : '/dashboard', { state: { defaultTab: 'claims' } });
+                navigate(isAdmin ? '/admin/dashboard' : '/dashboard/spender-list');
             }
         } catch (err) {
             console.error('Unexpected error:', err);
-            toast({ variant: 'destructive', title: 'Failed to claim item', description: 'An unexpected error occurred.' });
+            toast({ variant: 'destructive', title: 'Unable to claim item', description: getUserFriendlyError(err, 'claiming the item') });
         }
         
         setLoading(false);
@@ -169,22 +170,55 @@ const ClaimItemModal = ({ item, onClaimed, trigger }) => {
 
         const { email, username, password } = validationResult.data;
 
-        const { data, error } = await supabase.rpc('claim_item_transaction', {
-            item_id: item.id,
-            user_email: email,
-            user_username: username,
-            user_password: password,
-        });
+        try {
+            // Step 1: Create user account
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: email,
+                password: password,
+                options: {
+                    data: {
+                        username: username,
+                        full_name: username
+                    }
+                }
+            });
 
-        if (error || (data && !data.success)) {
-            const errorMessage = (data && data.message) || error?.message || 'An unknown error occurred.';
-            toast({ variant: 'destructive', title: 'Failed to claim item', description: errorMessage });
-            
-            if (errorMessage.includes("already exists")) {
-                setOpen(false);
-                navigate('/login');
+            if (authError) {
+                const errorMessage = authError.message;
+                const friendlyMessage = getUserFriendlyError(errorMessage, 'creating your account');
+                toast({ variant: 'destructive', title: 'Unable to create account', description: friendlyMessage });
+                
+                if (errorMessage.includes("already exists") || errorMessage.includes("already registered")) {
+                    setOpen(false);
+                    navigate('/login');
+                }
+                setLoading(false);
+                return;
             }
-        } else {
+
+            // Step 2: Create claim with pending status (will be confirmed after email verification)
+            const { data: claimData, error: claimError } = await supabase
+                .from('claims')
+                .insert({
+                    wishlist_item_id: item.id,
+                    supporter_user_id: authData.user?.id || null,
+                    supporter_contact: email,
+                    status: 'pending',
+                    expire_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                })
+                .select()
+                .single();
+
+            if (claimError) {
+                console.error('Claim error:', claimError);
+                toast({ variant: 'destructive', title: 'Unable to claim item', description: getUserFriendlyError(claimError, 'claiming the item') });
+                setLoading(false);
+                return;
+            }
+
+            console.log('Claim created successfully:', claimData);
+
+            // Step 3: Send verification email
             const { error: resendError } = await supabase.auth.resend({
                 type: 'signup',
                 email: email,
@@ -194,11 +228,15 @@ const ClaimItemModal = ({ item, onClaimed, trigger }) => {
             });
 
             if (resendError) {
-                 toast({ variant: 'destructive', title: 'Could not send verification email', description: resendError.message });
+                toast({ variant: 'destructive', title: 'Could not send verification email', description: getUserFriendlyError(resendError, 'sending verification email') });
             } else {
-                 setEmailSent(true);
-                 onClaimed();
+                setEmailSent(true);
+                onClaimed();
             }
+
+        } catch (err) {
+            console.error('Unexpected error:', err);
+            toast({ variant: 'destructive', title: 'Unable to claim item', description: getUserFriendlyError(err, 'claiming the item') });
         }
 
         setLoading(false);
@@ -241,7 +279,7 @@ const ClaimItemModal = ({ item, onClaimed, trigger }) => {
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>{trigger(buttonText, () => setOpen(true))}</DialogTrigger>
-            <DialogContent className={emailSent ? 'sm:max-w-md' : ''}>
+            <DialogContent className={emailSent ? 'sm:max-w-md' : ''} fullscreenOnMobile={true}>
                 {!emailSent ? (
                     <>
                         <DialogHeader>
@@ -335,7 +373,7 @@ const WishlistPage = () => {
     // No full page loader on re-fetch
     const { data, error } = await supabase
       .from('wishlists')
-      .select('*, user:users!inner(full_name, username, email), goals(*, contributions(*))')
+      .select('*, user:users!inner(full_name, username, email, is_active), goals(*, contributions(*))')
       .eq('slug', slug)
       .eq('user.username', username)
       .single();
@@ -415,6 +453,39 @@ const WishlistPage = () => {
     fetchWishlistData();
   }, [fetchWishlistData]);
 
+  // Track views when wishlist is loaded
+  useEffect(() => {
+    const trackView = async () => {
+      if (!wishlist?.id) return;
+      
+      // Check if this view has already been tracked in this session
+      const sessionKey = `viewed_wishlist_${wishlist.id}`;
+      const hasViewed = sessionStorage.getItem(sessionKey);
+      
+      if (hasViewed) return; // Don't count multiple views in same session
+      
+      try {
+        // Increment views_count
+        const { error } = await supabase
+          .from('wishlists')
+          .update({ 
+            views_count: (wishlist.views_count || 0) + 1 
+          })
+          .eq('id', wishlist.id);
+        
+        if (!error) {
+          // Mark as viewed in this session
+          sessionStorage.setItem(sessionKey, 'true');
+        }
+      } catch (error) {
+        console.error('Error tracking view:', error);
+        // Silently fail - view tracking shouldn't disrupt user experience
+      }
+    };
+    
+    trackView();
+  }, [wishlist?.id, wishlist?.views_count]);
+
   // Set up real-time subscription for wishlist items
   useEffect(() => {
     if (!wishlist?.id) return;
@@ -475,9 +546,23 @@ const WishlistPage = () => {
     }
   };
 
-  const copyLink = () => {
+  const copyLink = async () => {
     navigator.clipboard.writeText(wishlistUrl);
     toast({ title: 'Link copied to clipboard!' });
+    
+    // Track copy as a share
+    if (wishlist?.id) {
+      try {
+        await supabase
+          .from('wishlists')
+          .update({ 
+            shares_count: (wishlist.shares_count || 0) + 1 
+          })
+          .eq('id', wishlist.id);
+      } catch (error) {
+        console.error('Error tracking share:', error);
+      }
+    }
   };
 
   const refreshData = async () => {
@@ -488,6 +573,22 @@ const WishlistPage = () => {
   };
   
   const handleShare = async () => {
+    // Track share
+    const trackShare = async () => {
+      if (!wishlist?.id) return;
+      
+      try {
+        await supabase
+          .from('wishlists')
+          .update({ 
+            shares_count: (wishlist.shares_count || 0) + 1 
+          })
+          .eq('id', wishlist.id);
+      } catch (error) {
+        console.error('Error tracking share:', error);
+      }
+    };
+    
     // Implement share functionality with refresh
     if (navigator.share) {
       try {
@@ -496,6 +597,8 @@ const WishlistPage = () => {
           text: `Check out ${wishlist.title} wishlist!`,
           url: wishlistUrl,
         });
+        // Track successful share
+        await trackShare();
         // Refresh data after sharing to ensure it's up to date
         await refreshData();
       } catch (error) {
@@ -523,6 +626,35 @@ const WishlistPage = () => {
               <h1 className="text-3xl font-bold text-brand-purple-dark">Wishlist Not Found</h1>
               <p className="text-gray-600 mt-2">The wishlist you are looking for does not exist or has been moved.</p>
               <Link to="/"><Button variant="custom" className="mt-6 bg-brand-orange text-black">Go Home</Button></Link>
+          </div>
+      )
+  }
+
+  // Check if user account is deactivated
+  if (wishlist.user && wishlist.user.is_active === false) {
+      return (
+          <div className="flex flex-col justify-center items-center min-h-screen text-center px-4 py-12">
+              <PauseCircle className="w-32 h-32 md:w-40 md:h-40 text-amber-600 mx-auto mb-8"/>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-brand-purple-dark mb-6">
+                  Wishlist Temporarily Unavailable
+              </h1>
+              <p className="text-xl md:text-2xl text-gray-600 mt-6 max-w-2xl leading-relaxed">
+                  <strong className="text-brand-purple-dark">{wishlist.user.full_name}'s</strong> wishlist is currently paused and temporarily unavailable. All wishlists will be back online once they reactivate their account. Please check back later!
+              </p>
+              <div className="mt-10 space-y-4">
+                  <Link to="/explore">
+                      <Button variant="custom" className="bg-brand-purple-dark text-white text-lg px-8 py-6 h-auto border-2 border-black shadow-[-4px_4px_0px_#000] hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90">
+                          Browse Other Wishlists
+                      </Button>
+                  </Link>
+                  <div>
+                      <Link to="/">
+                          <Button variant="custom" className="bg-brand-green text-black text-base px-6 py-4 h-auto border-2 border-black shadow-[-4px_4px_0px_#000] hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90">
+                              Go Home
+                          </Button>
+                      </Link>
+                  </div>
+              </div>
           </div>
       )
   }
@@ -570,7 +702,7 @@ const WishlistPage = () => {
           </div>
         )}
 
-        <main className="max-w-7xl mx-auto py-8 px-4 md:px-0">
+        <main className="max-w-7xl mx-auto py-8 px-4">
             {/* Share buttons - on top of description */}
             <div className="flex justify-center mb-8">
               <div className="flex items-center gap-2">
@@ -701,7 +833,7 @@ const DescriptionModal = ({ item, trigger }) => {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>{trigger}</DialogTrigger>
-            <DialogContent className="max-w-2xl bg-brand-purple-dark border-2 border-black">
+            <DialogContent className="max-w-2xl bg-brand-purple-dark border-2 border-black" fullscreenOnMobile={false}>
                 <DialogHeader>
                     <DialogTitle className="text-brand-beige text-xl font-bold">{item.name}</DialogTitle>
                     <DialogDescription className="text-white/80">Full description</DialogDescription>
@@ -836,7 +968,7 @@ const GoalCard = ({ goal, index, recipientEmail, onContributed }) => {
                     <span className="font-semibold">Target: ₦{Number(goal.target_amount).toLocaleString()}</span>
                 </div>
                 <div className="relative h-4 w-full overflow-hidden border-2 border-black bg-gray-200">
-                    <div className={`h-full transition-all ${getProgressColor(progress)}`} style={{width: `${progress}%`}}></div>
+                    <div className={`h-full transition-all ${getProgressColor(progress)}`} style={{width: `${progress}%`, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0, 0, 0, 0.1) 10px, rgba(0, 0, 0, 0.1) 20px)'}}></div>
                 </div>
                 <div className="flex justify-between text-xs mt-1">
                     <span>{progress}% Complete</span>
@@ -971,7 +1103,7 @@ const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
                 toast({
                     variant: 'destructive',
                     title: 'Payment failed',
-                    description: error.message || 'Failed to initialize payment. Please try again.'
+                    description: getUserFriendlyError(error, 'initializing payment')
                 });
             }
         } finally {
@@ -1106,7 +1238,7 @@ const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
             toast({
                 variant: 'destructive',
                 title: 'Payment Error',
-                description: 'Unable to process payment. Please try again later.'
+                description: getUserFriendlyError(error, 'processing payment')
             });
         }
     };
@@ -1255,7 +1387,7 @@ const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
             toast({
                 variant: 'destructive',
                 title: 'Payment processing error',
-                description: 'Payment was successful but there was an error processing it. Please contact support.'
+                description: 'Your payment was successful, but we encountered an issue recording it. Please contact support with your payment reference.'
             });
         } finally {
             setIsProcessingPayment(false);
@@ -1275,7 +1407,7 @@ const ContributeModal = ({ goal, recipientEmail, onContributed, trigger }) => {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>{trigger}</DialogTrigger>
-            <DialogContent>
+            <DialogContent fullscreenOnMobile={false}>
                 <DialogHeader>
                     <DialogTitle>Contribute to "{goal.title}"</DialogTitle>
                     <DialogDescription>Your contribution will help reach the goal. Secure payment powered by Paystack.</DialogDescription>

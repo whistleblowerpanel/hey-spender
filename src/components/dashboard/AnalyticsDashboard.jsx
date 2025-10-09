@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { BarChart3, TrendingUp, Users, Gift, Eye, Share2, DollarSign } from 'lucide-react';
+import { TrendingUp, Users, Gift, Eye, Share2, DollarSign } from 'lucide-react';
 import AnalyticsCard from './AnalyticsCard';
 
 const AnalyticsDashboard = ({ wishlists, cashGoals }) => {
@@ -15,6 +15,15 @@ const AnalyticsDashboard = ({ wishlists, cashGoals }) => {
   const totalTargetAmount = cashGoals.reduce((sum, g) => sum + (g.target_amount || 0), 0);
   const completionRate = totalTargetAmount > 0 ? (totalAmountRaised / totalTargetAmount) * 100 : 0;
 
+  // Calculate total items across all wishlists
+  const totalItems = wishlists.reduce((sum, w) => sum + (w.items_count || 0), 0);
+  
+  // Calculate claimed items
+  const claimedItems = wishlists.reduce((sum, w) => {
+    // Count items that have at least one claim
+    return sum + (w.claimed_items_count || 0);
+  }, 0);
+
   // Most popular occasion
   const occasionCounts = wishlists.reduce((acc, w) => {
     if (w.occasion) {
@@ -22,46 +31,49 @@ const AnalyticsDashboard = ({ wishlists, cashGoals }) => {
     }
     return acc;
   }, {});
-  const mostPopularOccasion = Object.keys(occasionCounts).reduce((a, b) => 
-    occasionCounts[a] > occasionCounts[b] ? a : b, 'None'
-  );
+  const mostPopularOccasion = Object.keys(occasionCounts).length > 0 
+    ? Object.keys(occasionCounts).reduce((a, b) => 
+        occasionCounts[a] > occasionCounts[b] ? a : b
+      )
+    : 'None';
+
+  // Average items per wishlist
+  const avgItemsPerWishlist = totalWishlists > 0 
+    ? (totalItems / totalWishlists).toFixed(1)
+    : 0;
+
+  // Calculate engagement rate (shares + views) / wishlists
+  const engagementRate = totalWishlists > 0
+    ? Math.round(((totalViews + totalShares) / totalWishlists))
+    : 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-6">
-        <BarChart3 className="w-6 h-6 text-brand-purple-dark" />
-        <h2 className="text-2xl font-bold text-brand-purple-dark">Analytics & Insights</h2>
-      </div>
-
       {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <AnalyticsCard
           title="Total Wishlists"
           value={totalWishlists}
-          change="+12%"
           icon={Gift}
-          trend="up"
+          subtitle={`${liveWishlists} live, ${completedWishlists} completed`}
         />
         <AnalyticsCard
-          title="Live Wishlists"
-          value={liveWishlists}
-          change="+8%"
-          icon={Eye}
-          trend="up"
+          title="Total Items"
+          value={totalItems}
+          icon={Gift}
+          subtitle={`Across all wishlists`}
         />
         <AnalyticsCard
           title="Total Views"
           value={totalViews.toLocaleString()}
-          change="+23%"
           icon={Eye}
-          trend="up"
+          subtitle={`All time engagement`}
         />
         <AnalyticsCard
           title="Total Shares"
           value={totalShares.toLocaleString()}
-          change="+15%"
           icon={Share2}
-          trend="up"
+          subtitle={`All time shares`}
         />
       </div>
 
@@ -117,32 +129,34 @@ const AnalyticsDashboard = ({ wishlists, cashGoals }) => {
                 <span className="font-medium capitalize">{mostPopularOccasion}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm">Average Items per Wishlist</span>
-                <span className="font-medium">
-                  {totalWishlists > 0 ? 
-                    Math.round(wishlists.reduce((sum, w) => sum + (w.items_count || 0), 0) / totalWishlists) : 0
-                  }
-                </span>
+                <span className="text-sm">Avg. Items per Wishlist</span>
+                <span className="font-medium">{avgItemsPerWishlist}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm">Conversion Rate</span>
-                <span className="font-medium">
-                  {totalViews > 0 ? 
-                    `${Math.round((totalShares / totalViews) * 100)}%` : '0%'
-                  }
-                </span>
+                <span className="text-sm">Total Items</span>
+                <span className="font-medium">{totalItems}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm">Engagement Rate</span>
+                <span className="font-medium">{engagementRate} per wishlist</span>
               </div>
             </div>
             
             <div className="pt-4 border-t">
-              <div className="text-sm text-gray-600 mb-2">Quick Actions</div>
-              <div className="flex gap-2">
-                <button className="px-3 py-1 bg-brand-purple-light text-brand-purple-dark text-xs font-medium">
-                  View Reports
-                </button>
-                <button className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium">
-                  Export Data
-                </button>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Completed Rate</span>
+                  <span className="font-medium">
+                    {totalWishlists > 0 
+                      ? `${Math.round((completedWishlists / totalWishlists) * 100)}%` 
+                      : '0%'
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Active Cash Goals</span>
+                  <span className="font-medium">{cashGoals.length}</span>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -155,26 +169,37 @@ const AnalyticsDashboard = ({ wishlists, cashGoals }) => {
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {wishlists.slice(0, 5).map((wishlist) => (
-              <div key={wishlist.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-brand-purple-light flex items-center justify-center">
-                    <Gift className="w-4 h-4 text-brand-purple-dark" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-sm">{wishlist.title}</div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(wishlist.updated_at).toLocaleDateString()}
+          {wishlists.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Gift className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+              <p className="text-sm">No wishlists created yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {wishlists.slice(0, 5).map((wishlist) => (
+                <div key={wishlist.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-brand-purple-light flex items-center justify-center">
+                      <Gift className="w-4 h-4 text-brand-purple-dark" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-sm">{wishlist.title}</div>
+                      <div className="text-xs text-gray-500">
+                        Updated {new Date(wishlist.updated_at).toLocaleDateString()}
+                      </div>
                     </div>
                   </div>
+                  <div className={`text-xs px-2 py-1 rounded capitalize ${
+                    wishlist.status === 'live' ? 'bg-green-100 text-green-700' :
+                    wishlist.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {wishlist.status}
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500 capitalize">
-                  {wishlist.status}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -182,3 +207,4 @@ const AnalyticsDashboard = ({ wishlists, cashGoals }) => {
 };
 
 export default AnalyticsDashboard;
+

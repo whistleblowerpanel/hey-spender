@@ -99,7 +99,7 @@ const WishlistCard = ({
               <span className="text-gray-600">Items Progress</span>
               <span className="font-medium">{Math.round(progress)}%</span>
             </div>
-            <Progress value={progress} className="h-2" />
+            <Progress value={progress} className="h-4" />
           </div>
           
           <div className="flex justify-between text-sm">
@@ -124,8 +124,8 @@ const WishlistCard = ({
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-brand-purple-dark hover:bg-brand-purple-dark/90">
+                <MoreHorizontal className="h-4 w-4 text-white" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -145,7 +145,7 @@ const WishlistCard = ({
                 <Gift className="mr-2 h-4 w-4" />
                 Add Items
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDelete} className="text-red-600">
+              <DropdownMenuItem onClick={onDelete} className="text-brand-accent-red">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </DropdownMenuItem>

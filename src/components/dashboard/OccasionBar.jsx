@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Cake, Heart, GraduationCap, Bird, Baby, Gift, Sparkles, Church } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { getUserFriendlyError } from '@/lib/utils';
 
 const OccasionBar = ({
   occasions,
@@ -10,22 +12,23 @@ const OccasionBar = ({
   onRename,
   onDelete
 }) => {
+  const { toast } = useToast();
   const [editingOccasion, setEditingOccasion] = useState(null);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef(null);
 
-  // Get emoji based on occasion title content
-  const getOccasionEmoji = (title) => {
+  // Get icon based on occasion title content
+  const getOccasionIcon = (title) => {
     const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes('birthday') || lowerTitle.includes('bday')) return '🎂';
-    if (lowerTitle.includes('wedding') || lowerTitle.includes('marriage')) return '💒';
-    if (lowerTitle.includes('graduation') || lowerTitle.includes('grad')) return '🎓';
-    if (lowerTitle.includes('memorial') || lowerTitle.includes('burial') || lowerTitle.includes('funeral')) return '🕊️';
-    if (lowerTitle.includes('anniversary')) return '💕';
-    if (lowerTitle.includes('baby') || lowerTitle.includes('shower')) return '👶';
-    if (lowerTitle.includes('christmas') || lowerTitle.includes('holiday')) return '🎄';
-    if (lowerTitle.includes('new year')) return '🎆';
-    return '🎁'; // Default emoji
+    if (lowerTitle.includes('birthday') || lowerTitle.includes('bday')) return Cake;
+    if (lowerTitle.includes('wedding') || lowerTitle.includes('marriage')) return Church;
+    if (lowerTitle.includes('graduation') || lowerTitle.includes('grad')) return GraduationCap;
+    if (lowerTitle.includes('memorial') || lowerTitle.includes('burial') || lowerTitle.includes('funeral')) return Bird;
+    if (lowerTitle.includes('anniversary')) return Heart;
+    if (lowerTitle.includes('baby') || lowerTitle.includes('shower')) return Baby;
+    if (lowerTitle.includes('christmas') || lowerTitle.includes('holiday')) return Sparkles;
+    if (lowerTitle.includes('new year')) return Sparkles;
+    return Gift; // Default icon
   };
 
   useEffect(() => {
@@ -46,6 +49,11 @@ const OccasionBar = ({
         await onRename(editingOccasion, editValue.trim());
       } catch (error) {
         console.error('Failed to rename occasion:', error);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Unable to rename occasion', 
+          description: getUserFriendlyError(error, 'renaming the occasion') 
+        });
       }
     }
     setEditingOccasion(null);
@@ -67,43 +75,37 @@ const OccasionBar = ({
 
   return (
     <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
-      <Button
-        onClick={onCreate}
-        variant="outline"
-        className="flex-shrink-0 border-dashed border-gray-300 hover:border-brand-purple-dark hover:bg-brand-purple-dark/5"
-      >
-        <Plus className="w-4 h-4 mr-2" />
-        New Occasion
-      </Button>
-
       {occasions.map((occasion) => {
         const isActive = active === occasion;
         const isEditing = editingOccasion === occasion;
-        const emoji = getOccasionEmoji(occasion);
+        const IconComponent = getOccasionIcon(occasion);
         const label = occasion; // Display the title directly
 
         return (
           <div
             key={occasion}
-            className={`flex items-center gap-2 px-4 py-2 border-2 transition-all flex-shrink-0 group ${
+            className={`flex items-center gap-2 px-4 py-2 border-2 border-black transition-all flex-shrink-0 group ${
               isActive
-                ? 'border-brand-purple-dark bg-brand-purple-dark text-white'
-                : 'border-gray-200 bg-white hover:border-brand-purple-dark hover:bg-brand-purple-dark/5'
+                ? 'bg-brand-purple-dark text-white'
+                : 'bg-white hover:bg-brand-purple-dark/5'
             }`}
           >
             {isEditing ? (
-              <input
-                ref={inputRef}
-                type="text"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={handleSave}
-                onKeyDown={handleKeyDown}
-                className="bg-transparent border-none outline-none text-sm font-medium min-w-0 flex-1"
-              />
+              <>
+                <IconComponent className="w-4 h-4" />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={handleSave}
+                  onKeyDown={handleKeyDown}
+                  className="bg-transparent border-none outline-none text-sm font-medium min-w-0 flex-1"
+                />
+              </>
             ) : (
               <>
-                <span className="text-lg">{emoji}</span>
+                <IconComponent className="w-4 h-4" />
                 <button
                   onClick={() => onSelect(isActive ? null : occasion)}
                   className="text-sm font-medium whitespace-nowrap"
@@ -129,6 +131,15 @@ const OccasionBar = ({
           </div>
         );
       })}
+
+      <Button
+        onClick={onCreate}
+        variant="outline"
+        className="flex-shrink-0 border-dashed border-gray-300 hover:border-brand-purple-dark hover:bg-brand-purple-dark/5"
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        New Occasion
+      </Button>
     </div>
   );
 };

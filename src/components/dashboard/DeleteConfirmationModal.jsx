@@ -9,7 +9,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, itemType, itemNam
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
-            <Trash2 className="w-5 h-5 text-red-600" />
+            <Trash2 className="w-5 h-5 text-brand-accent-red" />
             Delete {itemType}
           </AlertDialogTitle>
           <AlertDialogDescription>
@@ -18,10 +18,12 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, itemType, itemNam
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000]">
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="bg-red-600 hover:bg-red-700 text-white"
+            className="bg-brand-accent-red hover:bg-brand-accent-red/90 text-white border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] active:shadow-[0px_0px_0px_#000] active:brightness-90"
           >
             Delete {itemType}
           </AlertDialogAction>

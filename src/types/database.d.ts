@@ -29,6 +29,7 @@ export interface Database {
           phone_verified_at: string | null;
           is_active: boolean | null;
           is_admin: boolean | null;
+          suspended_by: string | null;
           created_at: string | null;
           updated_at: string | null;
           role: string | null;
@@ -43,6 +44,7 @@ export interface Database {
           phone_verified_at?: string | null;
           is_active?: boolean | null;
           is_admin?: boolean | null;
+          suspended_by?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
           role?: string | null;
@@ -57,6 +59,7 @@ export interface Database {
           phone_verified_at?: string | null;
           is_active?: boolean | null;
           is_admin?: boolean | null;
+          suspended_by?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
           role?: string | null;
@@ -158,6 +161,7 @@ export interface Database {
           expire_at: string;
           scheduled_purchase_date: string | null;
           reminder_channel: ReminderChannel | null;
+          amount_paid: number | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -171,6 +175,7 @@ export interface Database {
           expire_at: string;
           scheduled_purchase_date?: string | null;
           reminder_channel?: ReminderChannel | null;
+          amount_paid?: number | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -184,6 +189,7 @@ export interface Database {
           expire_at?: string;
           scheduled_purchase_date?: string | null;
           reminder_channel?: ReminderChannel | null;
+          amount_paid?: number | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -295,6 +301,7 @@ export interface Database {
           source: string | null;
           amount: number;
           description: string | null;
+          claim_id: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -304,6 +311,7 @@ export interface Database {
           source?: string | null;
           amount: number;
           description?: string | null;
+          claim_id?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -313,6 +321,7 @@ export interface Database {
           source?: string | null;
           amount?: number;
           description?: string | null;
+          claim_id?: string | null;
           created_at?: string | null;
         };
       };

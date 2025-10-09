@@ -19,59 +19,66 @@ const CashGoalCard = ({ goal, onEdit, onView, onShare }) => {
   }[goal.visibility];
 
   return (
-    <div className="bg-white border-2 border-black p-6 hover:shadow-lg transition-shadow">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <h3 className="font-semibold text-lg mb-2">{goal.title}</h3>
-          <div className="flex items-center gap-2 mb-3">
-            <span className={`px-2 py-1 text-xs font-medium ${visibilityColor}`}>
-              {visibilityLabel}
-            </span>
-            {goal.deadline && (
-              <span className="text-xs text-gray-500">
-                Due {new Date(goal.deadline).toLocaleDateString()}
+    <div className="relative bg-white border-2 border-black p-6 overflow-hidden group">
+      {/* Water fill animation */}
+      <div className="absolute inset-0 bg-brand-purple-dark/10 opacity-0 translate-y-full group-hover:translate-y-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:transition-all group-hover:duration-700 ease-in-out pointer-events-none" 
+           style={{ transformOrigin: 'bottom' }} />
+      
+      {/* Content wrapper with relative positioning to stay above the water fill */}
+      <div className="relative z-10">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <h3 className="font-semibold text-lg mb-2 text-black">{goal.title}</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <span className={`px-2 py-1 text-xs font-medium ${visibilityColor}`}>
+                {visibilityLabel}
               </span>
-            )}
+              {goal.deadline && (
+                <span className="text-xs text-black">
+                  Due {new Date(goal.deadline).toLocaleDateString()}
+                </span>
+              )}
+            </div>
           </div>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-brand-purple-dark hover:bg-brand-purple-dark/90">
+                <MoreHorizontal className="h-4 w-4 text-white" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onView}>
+                <Eye className="mr-2 h-4 w-4" />
+                View
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onEdit}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onShare}>
+                <Share2 className="mr-2 h-4 w-4" />
+                Share
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onView}>
-              <Eye className="mr-2 h-4 w-4" />
-              View
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onEdit}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onShare}>
-              <Share2 className="mr-2 h-4 w-4" />
-              Share
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
-      <div className="space-y-3">
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Progress</span>
-            <span className="font-medium">{Math.round(progress)}%</span>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-black">Progress</span>
+              <span className="font-medium text-black">{Math.round(progress)}%</span>
+            </div>
+            <Progress value={progress} className="h-3" />
           </div>
-          <Progress value={progress} className="h-2" />
-        </div>
-        
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Raised</span>
-          <span className="font-semibold">
-            ₦{goal.amount_raised.toLocaleString()} / ₦{goal.target_amount.toLocaleString()}
-          </span>
+          
+          <div className="flex justify-between text-sm">
+            <span className="text-black">Raised</span>
+            <span className="font-semibold text-black">
+              ₦{goal.amount_raised.toLocaleString()} / ₦{goal.target_amount.toLocaleString()}
+            </span>
+          </div>
         </div>
       </div>
     </div>
