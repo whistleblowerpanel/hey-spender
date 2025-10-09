@@ -1,0 +1,7 @@
+/**
+ * Brockmann Font Family
+ * Using Fontshare CSS API for reliable loading
+ */
+
+@import url('https://api.fontshare.com/v2/css?f[]=brockmann@400,700&display=swap');
+

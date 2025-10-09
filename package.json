@@ -37,6 +37,7 @@
     "date-fns": "^2.30.0",
     "dayjs": "^1.11.10",
     "dotenv": "^17.2.3",
+    "formidable": "^3.5.4",
     "framer-motion": "^10.16.4",
     "js-file-download": "^0.4.12",
     "libphonenumber-js": "^1.12.23",

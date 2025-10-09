@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Copy, Share2, Download, QrCode } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -69,6 +69,9 @@ const ShareModal = ({ isOpen, onClose, wishlist }) => {
             <Share2 className="w-5 h-5" />
             Share Wishlist
           </DialogTitle>
+          <DialogDescription>
+            Share your wishlist with friends and family. Use the options below to copy the link or generate a QR code.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">

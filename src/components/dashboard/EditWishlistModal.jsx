@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -61,9 +61,18 @@ const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
     try {
       const publicUrl = await imageService.uploadCoverImage(file, 'temp-user-id');
       setFormData(prev => ({ ...prev, coverImage: publicUrl }));
+      toast({
+        title: 'Image uploaded successfully',
+        description: 'Your cover image has been updated.'
+      });
     } catch (error) {
       console.error('Error uploading image:', error);
-      toast({ variant: 'destructive', title: 'Upload failed', description: getUserFriendlyError(error, 'uploading the image') });
+      
+      toast({ 
+        variant: 'destructive', 
+        title: 'Upload failed', 
+        description: getUserFriendlyError(error, 'uploading the image') 
+      });
     } finally {
       setUploading(false);
     }
@@ -93,6 +102,9 @@ const EditWishlistModal = ({ isOpen, onClose, wishlist, onSave }) => {
       <DialogContent className="sm:max-w-2xl" fullscreenOnMobile={true}>
         <DialogHeader>
           <DialogTitle>Edit Wishlist</DialogTitle>
+          <DialogDescription>
+            Update your wishlist details, cover image, and settings below.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">

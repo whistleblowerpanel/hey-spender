@@ -4,7 +4,7 @@ import { createLogger, defineConfig } from 'vite';
 import inlineEditPlugin from './plugins/visual-editor/vite-plugin-react-inline-editor.js';
 import editModeDevPlugin from './plugins/visual-editor/vite-plugin-edit-mode.js';
 import iframeRouteRestorationPlugin from './plugins/vite-plugin-iframe-route-restoration.js';
-import fileUploadPlugin from './vite-plugin-file-upload.js';
+// Removed complex upload plugins - using simple Supabase storage instead
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -207,8 +207,7 @@ export default defineConfig({
 	plugins: [
 		...(isDev ? [inlineEditPlugin(), editModeDevPlugin(), iframeRouteRestorationPlugin()] : []),
 		react(),
-		addTransformIndexHtml,
-		fileUploadPlugin()
+		addTransformIndexHtml
 	],
 	server: {
 		cors: true,

@@ -390,87 +390,35 @@ export const itemsService = {
   }
 };
 
-// Image upload service - SIMPLIFIED VERSION
+// Image upload service - ORIGINAL SUPABASE STORAGE
 export const imageService = {
   async uploadCoverImage(file, userId) {
-    // Check if we're in production
-    const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
-    
-    if (isProduction) {
-      throw new Error('Image uploads are not available in production. Please use existing images or contact support.');
-    }
-
-    // Development: Use original file extension
-    const fileExt = file.name.split('.').pop() || 'jpg';
-    const fileName = `${userId}-${Date.now()}.${fileExt}`;
-
-    // Upload to local storage via API endpoint
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('fileName', fileName);
-
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const filePath = `wishlist-covers/${fileName}`;
 
-      if (!response.ok) {
-        let errorMessage = 'Upload failed';
-        try {
-          const error = await response.json();
-          errorMessage = error.error || errorMessage;
-        } catch (e) {
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
+      const { error: uploadError } = await supabase.storage.from('HeySpender Media').upload(filePath, file);
+      if (uploadError) throw uploadError;
 
-      const data = await response.json();
-      return data.url;
-
+      const { data: { publicUrl } } = supabase.storage.from('HeySpender Media').getPublicUrl(filePath);
+      return publicUrl;
     } catch (error) {
       throw error;
     }
   },
 
   async uploadItemImage(file, userId) {
-    // Check if we're in production
-    const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
-    
-    if (isProduction) {
-      throw new Error('Image uploads are not available in production. Please use existing images or contact support.');
-    }
-
-    // Development: Use original file extension
-    const fileExt = file.name.split('.').pop() || 'jpg';
-    const fileName = `${userId}-${Date.now()}.${fileExt}`;
-
-    // Upload to local storage via API endpoint
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('fileName', fileName);
-
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const filePath = `item-images/${fileName}`;
 
-      if (!response.ok) {
-        let errorMessage = 'Upload failed';
-        try {
-          const error = await response.json();
-          errorMessage = error.error || errorMessage;
-        } catch (e) {
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
+      const { error: uploadError } = await supabase.storage.from('HeySpender Media').upload(filePath, file);
+      if (uploadError) throw uploadError;
 
-      const data = await response.json();
-      return data.url;
-
+      const { data: { publicUrl } } = supabase.storage.from('HeySpender Media').getPublicUrl(filePath);
+      return publicUrl;
     } catch (error) {
       throw error;
     }
