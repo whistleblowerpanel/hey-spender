@@ -138,7 +138,8 @@ const ClaimItemModal = ({ item, onClaimed, trigger }) => {
                 toast({ title: 'Added to Spender List!', description: 'This item has been added to your spender list.' });
                 onClaimed();
                 setOpen(false);
-                navigate('/dashboard', { state: { defaultTab: 'claims' } });
+                const isAdmin = user?.user_metadata?.role === 'admin';
+                navigate(isAdmin ? '/admin/dashboard' : '/dashboard', { state: { defaultTab: 'claims' } });
             }
         } catch (err) {
             console.error('Unexpected error:', err);

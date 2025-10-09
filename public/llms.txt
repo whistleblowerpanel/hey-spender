@@ -3,6 +3,6 @@
 - [Admin Dashboard - HeySpender](/admindashboard): No description available
 - [Admin Panel - HeySpender](/admin): Manage your wishlists and contributions from the admin panel.
 - [Check Your Email - HeySpender](/verify): No description available
-- [Explore Public Wishlists - HeySpender](/publicwishlists): Feeling generous? Browse public wishlists and make someone
+- [Explore Public Wishlists - HeySpender](/explore): Feeling generous? Browse public wishlists and make someone
 - [HeySpender - Create & Share Your Wishlist](/home): Create beautiful wishlists and share them with friends and family. Accept contributions via multiple payment methods.
 - [Login - HeySpender](/login): Login to your HeySpender account.

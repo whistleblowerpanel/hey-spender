@@ -28,7 +28,9 @@ module.exports = {
         sans: ['Brockmann', 'Poppins', 'sans-serif'],
       },
 			colors: {
-        'brand-purple-dark': '#723DC4',
+        'brand-purple': '#7c3bed',
+        'brand-purple-dark': '#7c3bed',
+        'brand-purple-light': '#e5d4ff',
         'brand-orange': '#E98144',
         'brand-green': '#86E589',
         'brand-beige': '#F6D9AD',

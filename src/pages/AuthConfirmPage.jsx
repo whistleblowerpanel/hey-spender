@@ -36,7 +36,8 @@ const AuthConfirmPage = () => {
                     
                     if (updateError) {
                         toast({ variant: 'destructive', title: 'Failed to confirm claim.', description: updateError.message });
-                        navigate('/dashboard');
+                        const isAdmin = session.user.user_metadata?.role === 'admin';
+                        navigate(isAdmin ? '/admin/dashboard' : '/dashboard');
                         return;
                     }
                     
@@ -52,12 +53,15 @@ const AuthConfirmPage = () => {
                     } else {
                         toast({ title: 'Item Claimed!', description: `You have successfully claimed "${claim.wishlist_item.name}".` });
                     }
-                     // Redirect to dashboard with state to select 'claims' tab
-                    navigate('/dashboard', { state: { defaultTab: 'claims' } });
+                    
+                    // Redirect to dashboard with state to select 'claims' tab
+                    const isAdmin = session.user.user_metadata?.role === 'admin';
+                    navigate(isAdmin ? '/admin/dashboard' : '/dashboard', { state: { defaultTab: 'claims' } });
 
                 } else {
                     toast({ title: 'Account Confirmed!', description: 'Your account is now active.' });
-                    navigate('/dashboard');
+                    const isAdmin = session.user.user_metadata?.role === 'admin';
+                    navigate(isAdmin ? '/admin/dashboard' : '/dashboard');
                 }
 
             } else {

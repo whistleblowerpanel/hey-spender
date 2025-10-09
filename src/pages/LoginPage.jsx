@@ -56,16 +56,24 @@ const LoginPage = () => {
     } else {
         toast({ title: 'Login successful!', description: "Welcome back." });
         
-        // If user is a new spender, redirect to spender list
-        const { data: claimsCount } = await supabase
-            .from('claims')
-            .select('id', { count: 'exact', head: true })
-            .eq('supporter_user_id', data.user.id);
+        // Check if user is admin
+        const isAdmin = data.user.user_metadata?.role === 'admin';
         
-        if (data.user.identities?.length > 0 && (claimsCount || 0) > 0) {
-            navigate('/dashboard', { state: { defaultTab: 'claims' } });
+        if (isAdmin) {
+            // Redirect admin users to admin dashboard
+            navigate('/admin/dashboard');
         } else {
-            navigate('/dashboard');
+            // For regular users, check if they have claims to show spender list
+            const { data: claimsCount } = await supabase
+                .from('claims')
+                .select('id', { count: 'exact', head: true })
+                .eq('supporter_user_id', data.user.id);
+            
+            if (data.user.identities?.length > 0 && (claimsCount || 0) > 0) {
+                navigate('/dashboard', { state: { defaultTab: 'claims' } });
+            } else {
+                navigate('/dashboard');
+            }
         }
     }
     

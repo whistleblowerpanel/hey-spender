@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { sendWithdrawalNotifications } from '@/lib/notificationService';
+import { paystackTransferService } from '@/lib/paystackTransferService';
 import { Loader2, Users, Gift, Settings, Trash2, ExternalLink, Banknote, CheckCircle, XCircle, DollarSign, Eye, EyeOff, Flag, Save, CreditCard, ArrowUpDown, Wallet as WalletIcon, ChevronsRight, Calendar as CalendarIcon, ArrowDown, ArrowUp, Clock } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -725,7 +726,7 @@ const AdminDashboardPage = () => {
       return (
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-brand-orange"></div>
-          <span className="text-xs font-semibold">Withdrawn</span>
+          <span className="text-xs font-semibold">Withdrawal</span>
         </div>
       );
     }
@@ -746,9 +747,9 @@ const AdminDashboardPage = () => {
     if (source === 'sent') return 'Cash Sent';
     if (source === 'contribution') return 'Contributions';
     if (source === 'wishlist_purchase') return 'Cash Payment';
-    if (source === 'payout') return 'Withdrawn';
+    if (source === 'payout') return 'Withdrawal';
     if (source === 'refund') return 'Refund';
-    return transaction.type === 'credit' ? 'Money Received' : 'Money Withdrawn';
+    return transaction.type === 'credit' ? 'Money Received' : 'Money Withdrawal';
   };
 
   // Helper to truncate long usernames
@@ -881,7 +882,12 @@ const AdminDashboardPage = () => {
 
   // Build merged transaction list for admin from contributions, payouts, and wallet payments
   const mergedTransactions = (() => {
-    const wt = (data.walletTransactions || []).map((t) => {
+    // Filter out payout-related transactions from wallet_transactions since we'll use payouts table instead
+    const wt = (data.walletTransactions || []).filter((t) => {
+      const raw = (t.source || t.description || '').toLowerCase();
+      // Exclude payout/withdrawal transactions as they should come from payouts table
+      return !(raw.includes('payout') || raw.includes('withdraw'));
+    }).map((t) => {
       // Ensure minimal shape
       return { ...t };
     });
@@ -898,6 +904,7 @@ const AdminDashboardPage = () => {
       description: c.goal?.title ? `Contributions for "${c.goal.title}"` : 'Contributions received',
       created_at: c.created_at,
     }));
+    // Use ALL payouts from the payouts table, not just 'paid' ones
     const payouts = (data.payouts || []).map((p) => ({
       id: `payout_${p.id}`,
       wallet_id: p.wallet_id || null,
@@ -908,20 +915,19 @@ const AdminDashboardPage = () => {
       contributor_name: p.wallet?.user?.username || p.wallet?.user?.full_name || null,
       description: `Withdrawal to ${p.destination_bank_code || 'bank'} ${p.destination_account || ''}`.trim(),
       created_at: p.created_at,
+      status: p.status, // Include status for filtering
     }));
     return [...wt, ...contribs, ...payouts].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   })();
 
   // Derived totals (match user's wallet logic semantics)
   const totalReceived = mergedTransactions.filter(t => t.type === 'credit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
-  const totalWithdrawn = mergedTransactions.filter(t => {
-    const raw = (t.source || t.description || '').toLowerCase();
-    return raw.includes('payout') || raw.includes('withdraw');
-  }).reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  // Calculate total withdrawn using ONLY payouts table data
+  const totalWithdrawn = (data.payouts || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const balance = mergedTransactions.reduce((acc, t) => {
     if (t.type === 'credit') return acc + Number(t.amount || 0);
-    const raw = (t.source || t.description || '').toLowerCase();
-    if (raw.includes('payout') || raw.includes('withdraw')) return acc - Number(t.amount || 0);
+    // Only subtract payouts from the payouts table, not wallet_transactions
+    if (t.source === 'payout') return acc - Number(t.amount || 0);
     return acc;
   }, 0);
 
@@ -950,7 +956,7 @@ const AdminDashboardPage = () => {
         return {
           card1: { title: 'Total Balance', value: `₦${Number(balance).toLocaleString()}`, icon: <WalletIcon className="w-6 h-6" />, bgColor: 'bg-brand-green', textColor: 'text-black' },
           card2: { title: 'Total Received', value: `₦${Number(totalReceived).toLocaleString()}`, icon: <ChevronsRight className="w-6 h-6" />, bgColor: 'bg-brand-orange', textColor: 'text-black' },
-          card3: { title: 'Total Withdrawn', value: `₦${Number(totalWithdrawn).toLocaleString()}`, icon: <Banknote className="w-6 h-6" />, bgColor: 'bg-brand-purple-dark', textColor: 'text-white' }
+          card3: { title: 'Total Withdrawal', value: `₦${Number(totalWithdrawn).toLocaleString()}`, icon: <Banknote className="w-6 h-6" />, bgColor: 'bg-brand-purple-dark', textColor: 'text-white' }
         };
       case 'settings':
         return {
@@ -1058,7 +1064,78 @@ const AdminDashboardPage = () => {
 
       const oldStatus = currentPayout.status;
 
-      // Update the payout status
+      // If marking as paid, process the actual Paystack transfer first
+      if (newStatus === 'paid') {
+        // Validate required payout data for transfer
+        if (!currentPayout.destination_account || !currentPayout.destination_bank_code) {
+          toast({ 
+            variant: 'destructive', 
+            title: 'Cannot process payout', 
+            description: 'Missing bank account details. Please ensure the payout has valid account number and bank code.' 
+          });
+          return;
+        }
+
+        // Show loading toast
+        toast({ 
+          title: 'Processing Paystack transfer...', 
+          description: 'Please wait while we process the withdrawal.' 
+        });
+
+        // Process the payout through Paystack
+        const transferResult = await paystackTransferService.processPayout({
+          payout_id: payoutId,
+          amount: currentPayout.amount,
+          destination_account: currentPayout.destination_account,
+          destination_bank_code: currentPayout.destination_bank_code,
+          user_name: currentPayout.wallet?.user?.full_name || 'User',
+          user_email: currentPayout.wallet?.user?.email || 'user@example.com'
+        });
+
+        if (!transferResult.success) {
+          toast({ 
+            variant: 'destructive', 
+            title: 'Transfer failed', 
+            description: `Paystack transfer failed: ${transferResult.error}. Please try again or contact support.` 
+          });
+          return;
+        }
+
+        // If transfer requires OTP, show special message
+        if (transferResult.requires_otp) {
+          toast({ 
+            title: 'Transfer initiated - OTP required', 
+            description: 'Transfer has been initiated but requires OTP verification. Check your Paystack dashboard to complete the transfer.' 
+          });
+        } else {
+          toast({ 
+            title: 'Transfer successful', 
+            description: `Transfer of ₦${currentPayout.amount.toLocaleString()} has been processed successfully.` 
+          });
+        }
+
+        // Update the payout status to paid (this will also debit the wallet)
+        const { error } = await supabase.rpc('update_payout_status', { 
+          p_payout_id: payoutId, 
+          p_new_status: 'paid', 
+          p_admin_id: user.id 
+        });
+
+        if (error) throw error;
+
+        // Send notification to user about successful transfer
+        try {
+          await sendWithdrawalNotifications.onStatusChange(currentPayout, oldStatus, 'paid');
+        } catch (notificationError) {
+          console.error('Notification error:', notificationError);
+          // Don't fail the status update if notifications fail
+        }
+
+        fetchData();
+        return;
+      }
+
+      // For other status updates (approve, fail, etc.), use the original logic
       const { error } = await supabase.rpc('update_payout_status', { 
         p_payout_id: payoutId, 
         p_new_status: newStatus, 
@@ -1201,12 +1278,12 @@ const AdminDashboardPage = () => {
             </div>
 
             <Tabs defaultValue="users" className="w-full px-4 md:px-0" onValueChange={setActiveTab}>
-            <TabsList className="w-full sm:grid sm:grid-cols-4 md:grid-cols-5 sm:overflow-visible">
-                <TabsTrigger value="users"><Users className="w-4 h-4 mr-2" />Users</TabsTrigger>
-                <TabsTrigger value="wishlists"><Gift className="w-4 h-4 mr-2" />Wishlists</TabsTrigger>
-                <TabsTrigger value="payouts"><DollarSign className="w-4 h-4 mr-2" />Payouts</TabsTrigger>
-                <TabsTrigger value="transactions"><ArrowUpDown className="w-4 h-4 mr-2" />Transactions</TabsTrigger>
-                <TabsTrigger value="settings"><Settings className="w-4 h-4 mr-2" />Settings</TabsTrigger>
+            <TabsList className="inline-flex h-12 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground gap-1 overflow-x-auto scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none] w-full sm:grid sm:grid-cols-4 md:grid-cols-5 sm:overflow-visible">
+                <TabsTrigger value="users" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><Users className="w-4 h-4 mr-2" />Users</TabsTrigger>
+                <TabsTrigger value="wishlists" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><Gift className="w-4 h-4 mr-2" />Wishlists</TabsTrigger>
+                <TabsTrigger value="payouts" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><DollarSign className="w-4 h-4 mr-2" />Payouts</TabsTrigger>
+                <TabsTrigger value="transactions" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><ArrowUpDown className="w-4 h-4 mr-2" />Transactions</TabsTrigger>
+                <TabsTrigger value="settings" className="flex-shrink-0 min-w-[44px] min-h-[40px]"><Settings className="w-4 h-4 mr-2" />Settings</TabsTrigger>
             </TabsList>
 
             <TabsContent value="users" className="mt-6 overflow-x-auto">

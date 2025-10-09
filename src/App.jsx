@@ -8,7 +8,7 @@ import WishlistPage from '@/pages/WishlistPage';
 import AuthPage from '@/pages/AuthPage';
 import LoginPage from '@/pages/LoginPage';
 import ProfilePage from '@/pages/ProfilePage';
-import DashboardPage from '@/pages/DashboardPage';
+import DashboardPage from '@/pages/MyWishlistV2Page';
 import VerifyPage from '@/pages/VerifyPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import PublicWishlistsPage from '@/pages/PublicWishlistsPage';
@@ -32,7 +32,7 @@ function App() {
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/wishlists" element={<PublicWishlistsPage />} />
+            <Route path="/explore" element={<PublicWishlistsPage />} />
             <Route path="/auth/confirm" element={<AuthConfirmPage />} />
             <Route path="/:username/:slug" element={<WishlistPage />} />
             <Route path="/:username" element={<ProfilePage />} />

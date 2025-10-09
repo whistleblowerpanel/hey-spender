@@ -68,7 +68,7 @@ const Navbar = () => {
           </Link>
 
           <div className="hidden md:flex items-center space-x-2">
-            <Button onClick={() => navigate('/wishlists')} variant="custom" className="bg-[#E94B29] text-white">
+            <Button onClick={() => navigate('/explore')} variant="custom" className="bg-[#E94B29] text-white">
               <Sparkles className="w-4 h-4 mr-2" />
               Explore Wishlists
             </Button>
@@ -146,7 +146,7 @@ const Navbar = () => {
           : 'bg-brand-purple-dark/95'
       }`}>
              <div className="flex flex-col space-y-2 mb-4">
-                <Button onClick={() => { navigate('/wishlists'); setMobileMenuOpen(false); }} variant="custom" className="bg-[#E94B29] text-white w-full justify-start">
+                <Button onClick={() => { navigate('/explore'); setMobileMenuOpen(false); }} variant="custom" className="bg-[#E94B29] text-white w-full justify-start">
                     <Sparkles className="w-4 h-4 mr-2" />
                     Explore Wishlists
                 </Button>

@@ -463,7 +463,12 @@ const DashboardPage = () => {
       <div className="max-w-7xl mx-auto py-8">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4 px-4 md:px-0">
           <h1 className="text-4xl font-bold text-brand-purple-dark">Dashboard</h1>
-          <WishlistFormModal onWishlistAction={handleWishlistAction} trigger={<Button variant="custom" className="bg-brand-orange text-black w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Create Wishlist</Button>} />
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/dashboard/wishlists-v2')}>
+              Try Wishlist V2
+            </Button>
+            <WishlistFormModal onWishlistAction={handleWishlistAction} trigger={<Button variant="custom" className="bg-brand-orange text-black w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Create Wishlist</Button>} />
+          </div>
         </div>
         
         <Tabs defaultValue={defaultTab} className="w-full">
@@ -677,7 +682,7 @@ const WalletStatCard = ({ title, value, icon, loading, bgColor = 'bg-brand-cream
         <div className="mt-1 flex justify-end">
           <Button
             onClick={onWithdraw}
-            className="bg-brand-orange hover:bg-brand-orange/90 text-black border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-base font-bold px-6 py-2 h-8 w-full max-w-[140px] flex items-center justify-center"
+            className="bg-brand-green hover:bg-brand-green/90 text-black border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-base font-bold px-6 py-2 h-8 w-full max-w-[140px] flex items-center justify-center"
           >
             WITHDRAW
           </Button>
@@ -690,6 +695,7 @@ const WalletStatCard = ({ title, value, icon, loading, bgColor = 'bg-brand-cream
 const WalletView = () => {
   const { wallet, transactions, loading } = useWallet();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [filterType, setFilterType] = useState('all');
   const [visibleTransactions, setVisibleTransactions] = useState(17);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -766,19 +772,14 @@ const WalletView = () => {
 
   // Derived totals
   const totalReceived = (transactions || []).filter(t => t.type === 'credit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
-  // Only count platform withdrawals (payouts), not sent contributions
-  const totalWithdrawn = (transactions || []).filter(t => {
-    const raw = (t.source || t.description || '').toLowerCase();
-    return raw.includes('payout') || raw.includes('withdraw');
-  }).reduce((sum, t) => sum + Number(t.amount || 0), 0);
-  // Balance should reflect only platform wallet movements: add credits, subtract only payouts
+  // Calculate total withdrawn using ONLY payouts table data (withdrawalRequests)
+  const totalWithdrawn = (withdrawalRequests || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  // Balance should reflect only platform wallet movements: add credits, subtract only payouts from payouts table
   const balance = (transactions || []).reduce((acc, t) => {
     if (t.type === 'credit') return acc + Number(t.amount || 0);
-    const raw = (t.source || t.description || '').toLowerCase();
-    if (raw.includes('payout') || raw.includes('withdraw')) return acc - Number(t.amount || 0);
     // Do not subtract sent contributions; they are paid from bank, not wallet
     return acc;
-  }, 0);
+  }, 0) - totalWithdrawn; // Subtract total withdrawn from payouts table
 
   // Group transactions by date (computed later after filtering)
   // Placeholder; will be defined after filter
@@ -816,6 +817,12 @@ const WalletView = () => {
 
   // Filter transactions based on selected type (after helpers are defined to avoid TDZ errors)
   const allFilteredTransactions = (transactions || []).filter(transaction => {
+    // First, exclude payout-related transactions from wallet_transactions since we use payouts table
+    const raw = (transaction.source || transaction.description || '').toLowerCase();
+    if (raw.includes('payout') || raw.includes('withdraw')) {
+      return false; // Exclude these as they should come from payouts table
+    }
+    
     if (filterType === 'all') return true;
     if (filterType === 'credit') {
       const src = getNormalizedSource(transaction);
@@ -828,18 +835,39 @@ const WalletView = () => {
       return src === 'sent' || (transaction.type === 'debit' && src !== 'payout');
     }
     if (filterType === 'debit') {
-      const src = getNormalizedSource(transaction);
-      // Withdrawn view should only show payouts
-      return src === 'payout';
+      // For debit filter, we'll show withdrawalRequests from payouts table instead
+      return false; // No wallet_transactions should show for debit filter
     }
     return true;
   });
 
-  // Limit visible transactions
-  filteredTransactions = allFilteredTransactions.slice(0, visibleTransactions);
+  // Create combined display data for debit filter
+  const getDisplayData = () => {
+    if (filterType === 'debit') {
+      // For debit filter, show withdrawalRequests from payouts table
+      return withdrawalRequests.map(payout => ({
+        id: `payout_${payout.id}`,
+        type: 'debit',
+        source: 'payout',
+        amount: payout.amount,
+        title: 'Withdrawal',
+        description: `Withdrawal to ${payout.destination_bank_code || 'bank'} ${payout.destination_account || ''}`.trim(),
+        created_at: payout.created_at,
+        status: payout.status,
+        contributor_name: user?.user_metadata?.username || user?.user_metadata?.full_name || 'You'
+      }));
+    }
+    // For non-debit tabs, use the filtered list
+    return allFilteredTransactions;
+  };
 
-  // Recompute grouping with the new filtered list
-  const regrouped = filteredTransactions.reduce((groups, transaction) => {
+  const displayData = getDisplayData();
+
+  // Limit visible transactions
+  const limitedDisplayData = displayData.slice(0, visibleTransactions);
+
+  // Group transactions by date
+  const regrouped = limitedDisplayData.reduce((groups, transaction) => {
     const date = new Date(transaction.created_at).toDateString();
     if (!groups[date]) groups[date] = [];
     groups[date].push(transaction);
@@ -910,7 +938,7 @@ const WalletView = () => {
       return (
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-brand-orange"></div>
-          <span className="text-xs font-semibold">Withdrawn</span>
+          <span className="text-xs font-semibold">Withdrawal</span>
         </div>
       );
     }
@@ -931,9 +959,9 @@ const WalletView = () => {
     if (source === 'sent') return 'Cash Sent';
     if (source === 'contribution') return 'Contributions';
     if (source === 'wishlist_purchase') return 'Cash Payment';
-    if (source === 'payout') return 'Withdrawn';
+    if (source === 'payout') return 'Withdrawal';
     if (source === 'refund') return 'Refund';
-    return transaction.type === 'credit' ? 'Money Received' : 'Money Withdrawn';
+    return transaction.type === 'credit' ? 'Money Received' : 'Money Withdrawal';
   };
 
   // Helper to truncate long usernames
@@ -1055,7 +1083,7 @@ const WalletView = () => {
           textColor="text-black"
         />
         <WalletStatCard 
-          title="Total Withdrawn" 
+          title="Total Withdrawal" 
           value={`₦${totalWithdrawn.toLocaleString()}`} 
           icon={<Banknote className="w-6 h-6" />} 
           loading={false} 
@@ -1066,83 +1094,7 @@ const WalletView = () => {
         />
       </div>
 
-      {/* Withdrawal History */}
-      <div className="border-2 border-black bg-white p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-brand-purple-dark">Withdrawal History</h3>
-          <Button 
-            variant="custom" 
-            className="bg-brand-green text-black"
-            onClick={handleWithdraw}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Withdrawal
-          </Button>
-        </div>
-
-        {loadingWithdrawals ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-purple-dark" />
-          </div>
-        ) : withdrawalRequests.length === 0 ? (
-          <div className="text-center py-8">
-            <Banknote className="mx-auto h-12 w-12 text-gray-400" />
-            <h4 className="mt-4 text-lg font-semibold text-gray-600">No withdrawal requests</h4>
-            <p className="mt-2 text-sm text-gray-500">You haven't made any withdrawal requests yet.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {withdrawalRequests.map((request) => (
-              <div key={request.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-lg font-semibold">₦{Number(request.amount).toLocaleString()}</span>
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getWithdrawalStatusColor(request.status)}`}>
-                        {getWithdrawalStatusText(request.status)}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <div><strong>Bank:</strong> {request.destination_bank_code || 'N/A'}</div>
-                      <div><strong>Account:</strong> {request.destination_account || 'N/A'}</div>
-                      <div><strong>Requested:</strong> {new Date(request.created_at).toLocaleDateString()}</div>
-                      {request.updated_at && (
-                        <div><strong>Last Updated:</strong> {new Date(request.updated_at).toLocaleDateString()}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    {request.status === 'requested' && (
-                      <div className="text-xs text-brand-orange">
-                        <Clock className="w-4 h-4 inline mr-1" />
-                        Awaiting admin review
-                      </div>
-                    )}
-                    {request.status === 'processing' && (
-                      <div className="text-xs text-brand-purple-light">
-                        <Loader2 className="w-4 h-4 inline mr-1 animate-spin" />
-                        Processing...
-                      </div>
-                    )}
-                    {request.status === 'paid' && (
-                      <div className="text-xs text-brand-green">
-                        <CheckCircle className="w-4 h-4 inline mr-1" />
-                        Completed
-                      </div>
-                    )}
-                    {request.status === 'failed' && (
-                      <div className="text-xs text-brand-accent-red">
-                        <XCircle className="w-4 h-4 inline mr-1" />
-                        Failed
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Withdrawal History removed as per request */}
 
       {/* Transaction History Section - Responsive */}
       <div className="py-4 sm:py-6 px-0">
@@ -1175,13 +1127,13 @@ const WalletView = () => {
               className={`${filterType === 'debit' ? 'bg-brand-orange text-black' : ''} border-2 border-black shadow-none hover:shadow-[-2px_2px_0px_#000] text-sm sm:text-base px-2 sm:px-4 flex-1 sm:flex-none rounded-md`}
               onClick={() => setFilterType('debit')}
             >
-              Withdrawn
+            Withdrawal
             </Button>
           </div>
         </div>
 
         {/* Empty state */}
-        {filteredTransactions.length === 0 ? (
+        {limitedDisplayData.length === 0 ? (
           <div className="text-center py-8">
             <CalendarIcon className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-4 text-lg font-semibold text-gray-600">No transactions found</h3>
@@ -1213,10 +1165,18 @@ const WalletView = () => {
                               </div>
                               <div className="text-xs text-gray-600 mt-1">{getCategoryLabel(t)}</div>
                             </div>
-                            <div className="text-right ml-2 whitespace-nowrap">
-                              <div className="text-sm font-semibold">{getTransactionAmount(t)}</div>
-                              <div className="text-xs text-gray-600 mt-1">{getRelationLabel(t)}</div>
+                          <div className="text-right ml-2 whitespace-nowrap">
+                            <div className="text-sm font-semibold">{getTransactionAmount(t)}</div>
+                            <div className="mt-1">
+                              {filterType === 'debit' && getNormalizedSource(t) === 'payout' && t.status ? (
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-none ${getWithdrawalStatusColor(t.status)}`}>
+                                  {getWithdrawalStatusText(t.status)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-600">{getRelationLabel(t)}</span>
+                              )}
                             </div>
+                          </div>
                           </div>
                         </div>
                       </div>
@@ -1233,12 +1193,15 @@ const WalletView = () => {
                     <TableHead>Category</TableHead>
                     <TableHead>Username</TableHead>
                     <TableHead>Title</TableHead>
+                    {filterType === 'debit' && (
+                      <TableHead>Status</TableHead>
+                    )}
                     <TableHead>Amount</TableHead>
                     <TableHead>Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(filteredTransactions || []).map((t) => (
+                  {(limitedDisplayData || []).map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="whitespace-nowrap">{getDesktopBadge(t)}</TableCell>
                       <TableCell className="whitespace-nowrap">
@@ -1247,6 +1210,15 @@ const WalletView = () => {
                         ) : '—'}
                       </TableCell>
                       <TableCell className="max-w-[300px] truncate text-sm font-semibold">{getTitleDisplay(t) || getTransactionDescription(t)}</TableCell>
+                      {filterType === 'debit' && (
+                        <TableCell className="whitespace-nowrap">
+                          {getNormalizedSource(t) === 'payout' && t.status ? (
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-none ${getWithdrawalStatusColor(t.status)}`}>
+                              {getWithdrawalStatusText(t.status)}
+                            </span>
+                          ) : '—'}
+                        </TableCell>
+                      )}
                       <TableCell className="whitespace-nowrap text-sm font-semibold">{getTransactionAmount(t)}</TableCell>
                       <TableCell className="whitespace-nowrap text-xs text-gray-600">{format(new Date(t.created_at), 'PP p')}</TableCell>
                     </TableRow>
@@ -1258,7 +1230,7 @@ const WalletView = () => {
         )}
 
         {/* Load More Button */}
-        {allFilteredTransactions.length > visibleTransactions && (
+        {displayData.length > visibleTransactions && (
           <div className="flex justify-center mt-6">
             <Button
               variant="outline"
@@ -1381,23 +1353,8 @@ const WithdrawModal = ({ open, onOpenChange, wallet, balance }) => {
         // Don't fail the withdrawal if notifications fail
       }
 
-      // If auto-approved, create wallet transaction immediately
-      if (shouldAutoApprove && payoutData) {
-        const { error: txError } = await supabase
-          .from('wallet_transactions')
-          .insert({
-            wallet_id: wallet.id,
-            type: 'debit',
-            source: 'payout',
-            amount: amount,
-            description: `Withdrawal to ${withdrawData.bankCode} ${withdrawData.accountNumber} - Auto-approved`
-          });
-
-        if (txError) {
-          console.error('Error creating wallet transaction:', txError);
-          // Don't throw error here, just log it
-        }
-      }
+      // Note: Wallet transactions are now only created when admin marks payout as paid
+      // This prevents duplicate records in the admin dashboard
 
       const statusMessage = shouldAutoApprove 
         ? 'Your withdrawal has been automatically approved and is now processing! Funds will be transferred within 1-2 business days.'

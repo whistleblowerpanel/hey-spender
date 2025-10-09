@@ -17,17 +17,17 @@ const VerifyPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="w-full max-w-md p-8 space-y-6 bg-white border-2 border-black text-center"
+          className="w-full max-w-md p-8 space-y-6 bg-brand-purple-dark text-white border-2 border-black text-center"
         >
           <MailCheck className="w-16 h-16 mx-auto text-brand-green" />
-          <h1 className="text-3xl font-bold text-brand-purple-dark">Check Your Inbox!</h1>
-          <p className="text-gray-600">
+          <h1 className="text-3xl font-bold text-white">Check Your Inbox!</h1>
+          <p className="text-white/90">
             We've sent a verification link to your email address. Please click the link to confirm your account.
           </p>
-           <p className="text-sm text-gray-500">
+           <p className="text-sm text-white/80">
             You can close this tab after verifying.
           </p>
-          <Button variant="custom" className="bg-brand-salmon text-black" onClick={() => navigate('/login')}>
+          <Button variant="custom" className="bg-brand-accent-red text-white" onClick={() => navigate('/login')}>
             <X className="mr-2 h-4 w-4" />
             Close
           </Button>
